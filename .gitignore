@@ -1,0 +1,29 @@
+# --- Ambiente Virtual e Python Portátil ---
+# Impede que o Git suba a sua venv e a pasta do Python portátil
+venv/
+.venv/
+env/
+Python/
+
+# --- Cache de Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Dados Gerados (Importante!) ---
+# O Git não deve controlar arquivos de dados gerados automaticamente
+# para evitar que o repositório fique gigante.
+data/
+*.csv
+*.json
+
+# --- Logs e arquivos temporários ---
+*.log
+.tmp
+.DS_Store
+Thumbs.db
+
+# --- Configurações de IDE ---
+.vscode/
+.idea/
+.env
