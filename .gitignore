@@ -16,6 +16,8 @@ __pycache__/
 data/
 *.csv
 *.json
+#Ignorar menos o arquivo de municípios
+!municipios.json
 
 # --- Logs e arquivos temporários ---
 *.log

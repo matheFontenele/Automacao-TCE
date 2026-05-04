@@ -63,8 +63,15 @@ def extrair_dados(nome_dataset, url_base, params_base, nome_arquivo, municipios,
         log_func(f"Nenhum dado encontrado para {nome_dataset}.")
 
 # Função Wrapper facilitada
-def executar_pipeline(ano, mes_selecionado=None, log_func=print):
+def executar_pipeline(ano, mes_selecionado=None, municipio_selecionado=None, log_func=print):
     municipios = carregar_municipios()
+    
+    # --- NOVO: FILTRO DE MUNICÍPIO ---
+    if municipio_selecionado:
+        municipios = [municipio_selecionado]
+        log_func(f"Filtrando extração apenas para: {municipio_selecionado['nome_municipio']}")
+    # ---------------------------------
+
     exercicio = int(f"{ano}00")
     
     # Lógica para definir os meses: se for None ou 'Todos', faz 1 a 12
@@ -95,7 +102,7 @@ def executar_pipeline(ano, mes_selecionado=None, log_func=print):
                       {"exercicio_orcamento": exercicio, "data_referencia_doc": data_ref, "$format": "json"}, 
                       f"notas_pagamentos_{ano}_{mes:02d}", municipios, log_func=log_func)
         
-        # 4. Liquidações (NOME DO ARQUIVO CORRIGIDO)
+        # 4. Liquidações
         extrair_dados("Liquidações", "https://api-dados-abertos.tce.ce.gov.br/sim/pagamentos_liquidacoes", 
                       {"exercicio_orcamento": exercicio, "data_referencia_doc": data_ref, "$format": "json"}, 
                       f"liquidacoes_{ano}_{mes:02d}", municipios, log_func=log_func)

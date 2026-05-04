@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
-from main import executar_pipeline
+from main import executar_pipeline, carregar_municipios
 
 st.set_page_config(page_title="Automação TCE-CE", layout="wide")
 
@@ -11,7 +11,15 @@ st.title("🚀 Painel de Automação TCE-CE")
 with st.sidebar:
     st.header("Configurações")
     ano_input = st.number_input("Ano Base", min_value=2000, max_value=2030, value=2025)
+    
+    # Lógica do Selectbox de Municípios
+    lista_municipios = carregar_municipios()
 
+    # Dicionário para mapear "Nome (Código)" -> Objeto do Município
+    opcoes_mun = {f"{m['nome_municipio']} ({m['codigo_municipio']})": m for m in lista_municipios}
+
+    mun_input = st.selectbox("Município", options=["Todos"] + list(opcoes_mun.keys()))
+    
     mes_opcoes = ["Todos"] + list(range(1, 13))
     mes_input = st.selectbox("Mês de Extração", options=mes_opcoes)
     
@@ -23,11 +31,14 @@ with st.sidebar:
         # 2. Define a função que o main.py vai chamar
         def stream_log(msg):
             log_messages.append(msg)
-            log_container.code("\n".join(log_messages[-50:])) 
+            log_container.code("\n".join(log_messages[-50:]))
+
+        # Filtra o município se não for "Todos"
+        municipio_selecionado = None if mun_input == "Todos" else opcoes_mun[mun_input] 
 
         # 3. Chama o pipeline passando a nossa função de log
         with st.spinner("Buscando dados no TCE..."):
-            executar_pipeline(ano_input, log_func=stream_log)
+            executar_pipeline(ano_input, mes_selecionado=mes_input, municipio_selecionado=municipio_selecionado, log_func=stream_log)
             st.success("Extração concluída!")
 
 # Visualização de Dados (Tabs)
