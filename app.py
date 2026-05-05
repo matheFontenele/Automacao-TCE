@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 import os
@@ -47,31 +48,43 @@ st.header("Visualizar Dados")
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Notas de Empenho", "Notas Fiscais", "Notas de Pagamento", "Pagamento e Liquidações", "Liquidações", "Itens de Notas Fiscais"])
 
 def carregar_e_exibir_dados(tipo_dado):
-    # Procura todos os arquivos parquet que começam com o nome do tipo (ex: 'notas_empenho')
-    # O padrão glob 'data/{tipo_dado}_*.parquet' pega todos os meses/municipios
-    padrao = os.path.join('data', f"{tipo_dado}_*.parquet")
+    # 1. Obter o código do município selecionado
+    if mun_input == "Todos":
+        mun_code = "*"
+    else:
+        # Extrai o código entre parênteses: "CRATO (049)" -> "049"
+        match = re.search(r'\((\d+)\)', mun_input)
+        mun_code = match.group(1) if match else "*"
+
+    # 2. Obter o mês
+    mes_str = "*" if mes_input == "Todos" else str(mes_input).zfill(2)
+
+    # 3. Construir o padrão de busca
+    padrao = os.path.join('data', f"{tipo_dado}_{ano_input}_{mes_str}_{mun_code}.parquet")
     arquivos = glob.glob(padrao)
     
+    st.write(f"Buscando: {padrao}") # Ajuda a debugar o que está procurando
+
     if not arquivos:
-        st.warning(f"Nenhum arquivo de {tipo_dado} encontrado na pasta 'data'.")
+        st.warning(f"Nenhum arquivo encontrado para estes filtros: {ano_input} / {mes_input} / {mun_code}")
         return
 
-    if st.button(f"Carregar todos os dados de {tipo_dado}"):
-        with st.spinner("Concatenando arquivos Parquet..."):
+    # 4. Botão de carga dinâmica
+    if st.button(f"Filtrar e Carregar ({len(arquivos)} arquivos)", key=f"btn_{tipo_dado}"):
+        with st.spinner("Carregando e consolidando..."):
             df = pd.concat([pd.read_parquet(f) for f in arquivos], ignore_index=True)
-            
-            # Converte tudo para string para evitar erros de visualização no Streamlit
             df = df.astype(str)
             
             st.success(f"Carregados {len(df)} registros!")
             st.dataframe(df, use_container_width=True)
             
-            # Botão de download do consolidado
+            # Botão de download do que foi filtrado
             st.download_button(
-                label="Baixar dados consolidados (CSV)",
-                data=df.to_csv(index=False).encode('utf-8'),
-                file_name=f"{tipo_dado}_consolidado.csv",
-                mime='text/csv'
+                label="Baixar resultado filtrado (CSV)",
+                data=df.to_csv(index=False, sep=';').encode('utf-8-sig'),
+                file_name=f"dados_filtrados_{tipo_dado}.csv",
+                mime='text/csv',
+                key=f"download_{tipo_dado}" # Você já tinha esse, está correto!
             )
 
 with tab1:
