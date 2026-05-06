@@ -112,16 +112,15 @@ if __name__ == "__main__":
         ano_inicio = int(sys.argv[1])
         ano_fim = ano_inicio
         
-    # Se o usuário passou 2 argumentos (ex: python main.py 2020 2025)
+    # Se o usuário passou 2 argumentos (ex: python main.py 2020 2024)
     elif len(sys.argv) >= 3:
-        # Usamos min e max para garantir que o menor ano seja sempre o início, 
-        # mesmo que você digite invertido no terminal
+        # Usamos min e max para garantir que o menor ano seja sempre o início
         ano_inicio = min(int(sys.argv[1]), int(sys.argv[2]))
         ano_fim = max(int(sys.argv[1]), int(sys.argv[2]))
 
     print(f"Iniciando extração paralela para o período de {ano_inicio} a {ano_fim}...")
 
-    # Loop que passa por cada ano do intervalo (o +1 garante que o último ano seja incluído)
+    # Loop que passa por cada ano do intervalo
     for ano_atual in range(ano_inicio, ano_fim + 1):
         print(f"\n[{ano_atual}] - Iniciando processamento do ano...")
         executar_pipeline(ano_atual)
