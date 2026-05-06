@@ -39,34 +39,64 @@ def render_extraction_page():
     st.header("Visualizar Dados")
     
     def carregar_e_exibir_dados(tipo_dado):
-        # Usando os valores do session_state
-        ano = st.session_state.ano_input
-        mun_input = st.session_state.mun_input
-        mes_input = st.session_state.mes_input
+    # 1. Recuperar valores do session_state
+    ano = st.session_state.ano_input
+    mes = st.session_state.mes_input
+    mun = st.session_state.mun_input
 
-        if mun_input == "Todos":
-            mun_code = "*"
-        else:
-            match = re.search(r'\((\d+)\)', mun_input)
-            mun_code = match.group(1) if match else "*"
+    # 2. Configurar wildcards (curingas) para busca
+    ano_str = "*" if ano == "Todos" else str(ano)
+    mes_str = "*" if mes == "Todos" else str(mes).zfill(2)
+    
+    if mun == "Todos":
+        mun_str = "*"
+    else:
+        # Extrai o código entre parênteses: "CRATO (049)" -> "049"
+        match = re.search(r'\((\d+)\)', mun)
+        mun_str = match.group(1) if match else "*"
 
-        mes_str = "*" if mes_input == "Todos" else str(mes_input).zfill(2)
-        padrao = os.path.join('data', f"{tipo_dado}_{ano}_{mes_str}_{mun_code}.parquet")
-        arquivos = glob.glob(padrao)
+    # 3. Determinar o padrão de nome do arquivo
+    # Se for "itens_notas_fiscais", o formato no seu main.py não usa mês
+    if "itens_notas_fiscais" in tipo_dado:
+        padrao = os.path.join('data', f"{tipo_dado}_{ano_str}_{mun_str}.parquet")
+    else:
+        # Padrão para arquivos mensais
+        padrao = os.path.join('data', f"{tipo_dado}_{ano_str}_{mes_str}_{mun_str}.parquet")
 
-        st.write(f"Buscando: {padrao}")
+    arquivos = glob.glob(padrao)
 
-        if not arquivos:
-            st.warning(f"Nenhum arquivo encontrado.")
-            return
+    # Debug visual para você saber o que ele está buscando
+    with st.expander("Ver detalhes da busca"):
+        st.write(f"Padrão de busca: `{padrao}`")
+        st.write(f"Arquivos encontrados: {len(arquivos)}")
 
-        if st.button(f"Filtrar e Carregar ({len(arquivos)} arquivos)", key=f"btn_{tipo_dado}"):
-            with st.spinner("Carregando..."):
-                df = pd.concat([pd.read_parquet(f) for f in arquivos], ignore_index=True)
+    if not arquivos:
+        st.warning(f"Nenhum arquivo encontrado para estes filtros.")
+        return
+
+    # 4. Botão de carga dinâmica
+    if st.button(f"Carregar {len(arquivos)} arquivos", key=f"btn_{tipo_dado}"):
+        with st.spinner("Consolidando dados..."):
+            try:
+                # Carrega todos os arquivos encontrados
+                df_lista = [pd.read_parquet(f) for f in arquivos]
+                df = pd.concat(df_lista, ignore_index=True)
+                
+                # Garante que tudo seja texto para evitar conflitos de tipos (ex: float vs int)
                 df = df.astype(str)
-                st.success(f"Carregados {len(df)} registros!")
+
+                st.success(f"Sucesso! {len(df)} registros carregados.")
                 st.dataframe(df, use_container_width=True)
-                st.download_button("Baixar (CSV)", data=df.to_csv(index=False, sep=';').encode('utf-8-sig'), file_name=f"dados_{tipo_dado}.csv", mime='text/csv')
+
+                # Download
+                st.download_button(
+                    label="Baixar consolidado (CSV)",
+                    data=df.to_csv(index=False, sep=';').encode('utf-8-sig'),
+                    file_name=f"export_{tipo_dado}_{ano_str}.csv",
+                    mime='text/csv'
+                )
+            except Exception as e:
+                st.error(f"Erro ao carregar arquivos: {e}")
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Notas de Empenho", "Notas Fiscais", "Notas de Pagamento", "Pagamento e Liquidações", "Liquidações", "Itens de Notas Fiscais"])
     with tab1: carregar_e_exibir_dados("notas_empenho")
