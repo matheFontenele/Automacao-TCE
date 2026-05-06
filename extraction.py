@@ -56,7 +56,6 @@ def render_extraction_page():
         mun_str = match.group(1) if match else "*"
 
     # 3. Determinar o padrão de nome do arquivo
-    # Se for "itens_notas_fiscais", o formato no seu main.py não usa mês
     if "itens_notas_fiscais" in tipo_dado:
         padrao = os.path.join('data', f"{tipo_dado}_{ano_str}_{mun_str}.parquet")
     else:
@@ -65,7 +64,7 @@ def render_extraction_page():
 
     arquivos = glob.glob(padrao)
 
-    # Debug visual para você saber o que ele está buscando
+    # Debug visual
     with st.expander("Ver detalhes da busca"):
         st.write(f"Padrão de busca: `{padrao}`")
         st.write(f"Arquivos encontrados: {len(arquivos)}")
@@ -82,7 +81,7 @@ def render_extraction_page():
                 df_lista = [pd.read_parquet(f) for f in arquivos]
                 df = pd.concat(df_lista, ignore_index=True)
                 
-                # Garante que tudo seja texto para evitar conflitos de tipos (ex: float vs int)
+                # Garante que tudo seja texto para evitar conflitos de tipos
                 df = df.astype(str)
 
                 st.success(f"Sucesso! {len(df)} registros carregados.")
