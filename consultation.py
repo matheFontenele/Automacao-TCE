@@ -6,54 +6,105 @@ import os
 # 1. Configuração de Estilo Adaptativo (CSS)
 st.markdown("""
     <style>
+    /* 1. ESTILO DOS BOTÕES DE SISTEMA (Menu, Extração e Filtros) */
+    .stButton > button {
+        width: 100%;
+        border-radius: 8px;
+        height: 3.5em;
+        background-color: #1E1E24 !important; /* Grafite Escuro */
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        font-weight: 600;
+        transition: all 0.3s ease-in-out;
+    }
+
+    .stButton > button:hover {
+        background-color: #2D2D35 !important;
+        border-color: #ff4b4b !important;
+        color: #ff4b4b !important;
+        transform: translateY(-1px);
+    }
+
+    /* Destaque para o botão da tela ativa */
+    .stButton > button[kind="primary"] {
+        background-color: #ff4b4b !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(255, 75, 75, 0.3);
+    }
+
+    /* 2. ESTILO DOS CARDS DE RESULTADOS (Melhor Divisão) */
     .report-card {
         background-color: var(--secondary-background-color);
-        border: 1px solid rgba(128, 128, 128, 0.2);
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 15px;
-        border-left: 8px solid #ff4b4b;
+        /* Borda completa mais escura para destacar do fundo */
+        border: 1px solid rgba(128, 128, 128, 0.3); 
+        border-radius: 12px;
+        padding: 24px;
+        /* Aumentado para evidenciar a separação entre registros */
+        margin-bottom: 25px; 
+        border-left: 10px solid #ff4b4b;
         color: var(--text-color);
-        transition: transform 0.2s;
+        /* Sombra projetada para dar profundidade */
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2); 
+        transition: all 0.3s ease;
     }
+
     .report-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: scale(1.01); /* Leve expansão ao focar no card */
         border-color: #ff4b4b;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
     }
+
+    /* 3. TEXTOS INTERNOS DO CARD */
     .card-header { 
         color: #ff4b4b; 
         font-weight: bold; 
-        font-size: 0.8rem; 
+        font-size: 0.75rem; 
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 1.2px;
     }
+    
     .card-vendor { 
-        font-size: 1.15rem; 
-        font-weight: 700;
-        margin: 5px 0;
+        font-size: 1.2rem; 
+        font-weight: 800;
+        margin: 8px 0;
+        line-height: 1.2;
     }
+
     .card-org {
-        font-size: 0.9rem;
-        opacity: 0.8;
-        margin-bottom: 12px;
+        font-size: 0.95rem;
+        font-weight: 500;
+        opacity: 0.85;
+        margin-bottom: 15px;
     }
+
     .card-value { 
         font-family: 'Roboto Mono', monospace;
-        font-weight: bold; 
+        font-weight: 700; 
         color: #28a745; 
-        font-size: 1.4rem;
+        font-size: 1.5rem;
     }
+
+    /* 4. BOTÃO DE DETALHES DENTRO DO CARD */
     .btn-fake {
-        background-color: #ff4b4b;
+        background-color: #1E1E24;
         color: white !important;
-        padding: 5px 12px;
-        border-radius: 4px;
-        font-size: 12px;
+        padding: 8px 18px;
+        border-radius: 6px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
         text-decoration: none;
         display: inline-block;
-        margin-top: 10px;
+        margin-top: 15px;
         font-weight: bold;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transition: 0.3s;
+    }
+
+    .btn-fake:hover {
+        background-color: #ff4b4b;
+        border-color: #ff4b4b;
+        box-shadow: 0 4px 10px rgba(255, 75, 75, 0.2);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -115,21 +166,31 @@ def render_consultation_page():
             st.markdown(f"""
                 <div class="report-card">
                     <div style="display: flex; justify-content: space-between; align-items: stretch;">
-                        <div style="flex: 3; border-right: 1px solid rgba(128,128,128,0.2); padding-right: 20px;">
+            
+                        <div style="flex: 3; border-right: 1px solid rgba(128,128,128,0.3); padding-right: 25px;">
                             <div class="card-header">{id_doc}</div>
                             <div class="card-vendor">{entidade}</div>
                             <div class="card-org">📍 {row['municipio_referencia']}</div>
-                            <div style="font-size: 0.85rem; line-height: 1.5; opacity: 0.9;">
-                                {str(detalhe)[:250] + '...' if len(str(detalhe)) > 250 else detalhe}
+                
+                            <div style="font-size: 0.9rem; line-height: 1.6; opacity: 0.9; margin-top: 10px; color: var(--text-color);">
+                                {str(detalhe)[:280] + '...' if len(str(detalhe)) > 280 else detalhe}
+                         </div>
+                     </div>
+
+                     <div style="flex: 1.2; text-align: right; padding-left: 25px; display: flex; flex-direction: column; justify-content: center; background-color: rgba(128,128,128,0.03); border-radius: 0 8px 8px 0;">
+                          <div style="font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">
+                             {label}
+                          </div>
+                           <div class="card-value">
+                              R$ {valor:,.2f}
+                         </div>
+                          <div style="margin-top: 15px;">
+                              <a href="#" class="btn-fake">🔍 DETALHES</a>
                             </div>
-                        </div>
-                        <div style="flex: 1; text-align: right; padding-left: 20px; display: flex; flex-direction: column; justify-content: center;">
-                            <div style="font-size: 0.7rem; opacity: 0.6; text-transform: uppercase;">{label}</div>
-                            <div class="card-value">R$ {valor:,.2f}</div>
-                            <div><a href="#" class="btn-fake">🔍 DETALHES</a></div>
-                        </div>
-                    </div>
-                </div>
+                       </div>
+            
+                 </div>
+               </div>
             """, unsafe_allow_html=True)
 
         if len(df) > limite:
