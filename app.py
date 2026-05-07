@@ -23,3 +23,5 @@ if st.session_state.modo_tela == 'Extração':
     extraction.render_extraction_page()
 elif st.session_state.modo_tela == 'Consulta':
     consultation.render_consultation_page()
+
+st.write(dir(consultation))

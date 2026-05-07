@@ -3,14 +3,14 @@ import pandas as pd
 import glob
 import os
 
-def aba_consulta():
+def render_consultation_page():
     st.header("🔍 Consulta Detalhada")
 
     # 1. Filtros Superiores (Similar ao print que você enviou)
     with st.expander("Opções de Filtro", expanded=True):
         col1, col2, col3 = st.columns(3)
         with col1:
-            ano_sel = st.selectbox("Ano", options=[2024, 2025, 2026], index=2)
+            ano_sel = st.selectbox("Ano", options=[2020, 2021, 2022, 2023, 2024, 2025], index=5)
         with col2:
             categoria_sel = st.selectbox("Tipo de Documento", 
                                          options=["Notas de Empenho", "Notas Fiscais", "Liquidações"])
