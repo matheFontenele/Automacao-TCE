@@ -3,6 +3,13 @@ import pandas as pd
 import glob
 import os
 
+# Função de cache para acelerar o carregamento dos dados já processados
+@st.cache_data(show_spinner="Carregando base de dados da memória...")
+def carregar_dados_cached(arquivos):
+    if not arquivos:
+        return pd.DataFrame()
+    return pd.concat([pd.read_parquet(f) for f in arquivos], ignore_index=True)
+
 def render_consultation_page():
     st.header("🔍 Consulta Detalhada")
 
