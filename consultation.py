@@ -199,12 +199,12 @@ def render_consultation_page():
         
         if categoria_sel == "Notas de Empenho":
             col_ano, col_mun, col_pag = st.columns(3)
-            ano_sel = col_ano.selectbox("Ano", [2020, 2021, 2022, 2023, 2024, 2025, 2026], index=5)
+            ano_sel = col_ano.selectbox("Ano", [2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026], index=5)
             municipio_sel = col_mun.selectbox("Município", options=["Todos"] + list(opcoes_mun.keys()))
             pagamento_sel = col_pag.selectbox("Filtro de Pagamento", ["TODOS", "PENDENTE", "PARCIAL", "PAGO"])
         else:
             col_ano, col_mun = st.columns(2)
-            ano_sel = col_ano.selectbox("Ano", [2020, 2021, 2022, 2023, 2024, 2025, 2026], index=5)
+            ano_sel = col_ano.selectbox("Ano", [2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026], index=5)
             municipio_sel = col_mun.selectbox("Município", options=["Todos"] + list(opcoes_mun.keys()))
             pagamento_sel = "TODOS"
         
