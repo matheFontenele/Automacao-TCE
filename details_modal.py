@@ -55,6 +55,13 @@ def carregar_e_filtrar_modal(arquivos):
 @st.dialog("📋 Detalhes do Empenho", width="large")
 def exibir_modal_detalhes(row, categoria, ano, codigo_mun):
     
+    # --------------------------------------------------------------------------
+    # 1. DEFINIÇÃO DAS VARIÁVEIS DE BUSCA NO TOPO
+    # (Evita NameError em chamadas assíncronas ou fragmentadas do Streamlit)
+    # --------------------------------------------------------------------------
+    num_empenho_busca = str(row.get('numero_empenho', '')).strip()
+    cod_mun_busca = str(row.get('codigo_municipio', '')).strip()
+    
     # Cabeçalho Principal do Modal
     st.write(f"### Empenho Nº {row.get('numero_empenho', 'N/A')}")
     st.caption(f"📍 {row.get('municipio_referencia', 'Não Informado')} — Exercício Orçamentário: {str(row.get('exercicio_orcamento', ''))[:4]}")
@@ -99,78 +106,104 @@ def exibir_modal_detalhes(row, categoria, ano, codigo_mun):
     
     col_orc1, col_orc2 = st.columns(2)
     with col_orc1:
-        # Unidade Gestora baseada no município e na unidade orçamentária
         unidade_gestora = f"{row.get('municipio_referencia', 'N/A')} - U.O. {row.get('codigo_unidade_orcamentaria', 'N/A')}"
         st.markdown(f"**Unidade Gestora:** {unidade_gestora}")
-        
-        st.markdown(f"**Órgão:** `{row.get('codigo_orgao', 'N/A')}`")
-        st.markdown(f"**Unidade Orçamentária:** `{row.get('codigo_unidade_orcamentaria', 'N/A')}`")
-        
-        # Proj Atividade unindo código e número
-        proj_ativ = f"{row.get('codigo_projeto_atividade', '')}.{row.get('numero_projeto_atividade', '')}".strip('.')
-        st.markdown(f"**Proj. Atividade:** `{proj_ativ if proj_ativ else 'Não Informado'}`")
 
     with col_orc2:
-        # Natureza da despesa (elemento)
-        st.markdown(f"**Natureza (Elemento):** `{row.get('codigo_elemento_despesa', 'N/A')}`")
-        st.markdown(f"**Função:** `{row.get('codigo_funcao', 'N/A')}`")
-        st.markdown(f"**Sub-função:** `{row.get('codigo_subfuncao', 'N/A')}`")
-        st.markdown(f"**Fonte de Recurso:** `{row.get('codigo_fonte', 'N/A')}`")
+        st.markdown(f"**Órgão:** `{row.get('codigo_orgao', 'N/A')}`")
 
     st.divider()
 
     # ==============================================================================
-    # SEÇÃO 3: HISTÓRICO / HISTÓRICO
+    # SEÇÃO 3: HISTÓRICO / DESCRIÇÃO
     # ==============================================================================
     st.markdown("#### 📜 Histórico / Descrição")
     st.info(row.get('descricao_historico_empenho', 'Sem descrição adicional cadastrada.'))
 
+    st.divider()
+
     # ==============================================================================
-    # SEÇÃO 4: ITENS DA NOTA FISCAL (Carregamento Dinâmico)
+    # SEÇÃO 4: MOVIMENTAÇÕES DE LIQUIDAÇÃO E PAGAMENTOS (LADO A LADO)
     # ==============================================================================
-    st.markdown("#### 📦 Itens da Nota Fiscal")
-    
-    arquivos_itens = obter_caminho_arquivos_modal("itens_notas_fiscais", ano, codigo_mun)
-    
-    if arquivos_itens:
-        df_itens = carregar_e_filtrar_modal(arquivos_itens)
-        if not df_itens.empty:
-            cod_mun_item = row.get('codigo_municipio', '')
-            
-            num_empenho_busca = str(row.get('numero_empenho', '')).strip()
-            cod_mun_busca = str(cod_mun_item).strip()
-            
-            itens_filtrados = df_itens[
-                (df_itens['numero_nota_empenho'].astype(str).str.strip() == num_empenho_busca) & 
-                (df_itens['codigo_municipio'].astype(str).str.strip() == cod_mun_busca)
-            ]
-            
-            if not itens_filtrados.empty:
-                colunas_exibicao = {
-                    'descricao_item': 'Descrição do Item',
-                    'unidade_compra': 'Unidade',
-                    'numero_quantidade_comprada': 'Qtd',
-                    'valor_unitario_item': 'Valor Unitário',
-                    'valor_total_item': 'Valor Total'
-                }
-                colunas_existentes = [col for col in colunas_exibicao.keys() if col in itens_filtrados.columns]
+    col_liq, col_pag = st.columns(2)
+
+    # --- 1. Movimentações da Liquidação (Lado Esquerdo) ---
+    with col_liq:
+        st.markdown("#### 🔍 MOVIMENTAÇÕES DA LIQUIDAÇÃO")
+        arquivos_nfe = obter_caminho_arquivos_modal("notas_fiscais", ano, codigo_mun)
+        
+        if arquivos_nfe:
+            df_nfe = carregar_e_filtrar_modal(arquivos_nfe)
+            if not df_nfe.empty:
+                # Filtrando pela nota/empenho e pelo município correspondente
+                df_nfe_filtrada = df_nfe[
+                    (df_nfe['numero_empenho'].astype(str).str.strip() == num_empenho_busca) &
+                    (df_nfe['codigo_municipio'].astype(str).str.strip() == cod_mun_busca)
+                ]
                 
-                if colunas_existentes:
-                    df_exibir = itens_filtrados[colunas_existentes].rename(columns={k: v for k, v in colunas_exibicao.items() if k in colunas_existentes})
-                    if 'Valor Unitário' in df_exibir.columns:
-                        df_exibir['Valor Unitário'] = df_exibir['Valor Unitário'].apply(lambda x: f"R$ {formatar_moeda_modal(x)}")
-                    if 'Valor Total' in df_exibir.columns:
-                        df_exibir['Valor Total'] = df_exibir['Valor Total'].apply(lambda x: f"R$ {formatar_moeda_modal(x)}")
+                if not df_nfe_filtrada.empty:
+                    # Mapeando: Data, Nota fiscal, Valor
+                    df_exibir_liq = pd.DataFrame()
+                    df_exibir_liq['Data'] = df_nfe_filtrada['data_liquidacao'].apply(formatar_data_modal)
+                    df_exibir_liq['Nota fiscal'] = df_nfe_filtrada['numero_nota_fiscal'].astype(str)
+                    df_exibir_liq['Valor'] = df_nfe_filtrada['valor_liquido'].apply(lambda x: f"R$ {formatar_moeda_modal(x)}")
                     
-                    st.dataframe(df_exibir, use_container_width=True, hide_index=True)
+                    st.dataframe(df_exibir_liq, use_container_width=True, hide_index=True)
+                    
+                    # Quantidade e totalizadores inferiores como o layout de referência
+                    total_liq = df_nfe_filtrada['valor_liquido'].sum()
+                    st.markdown(
+                        f"<div style='display: flex; justify-content: space-between; font-size: 0.85rem; color: #555; font-weight: bold;'>"
+                        f"<span>Quantidade: {len(df_nfe_filtrada)}</span>"
+                        f"<span>Valor total: R$ {formatar_moeda_modal(total_liq)}</span>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
                 else:
-                    st.warning("As colunas de detalhamento de itens não foram localizadas nesta base.")
+                    st.warning("Nenhuma movimentação de liquidação registrada para este empenho.")
             else:
-                st.warning("Nenhum item quantitativo discriminado foi anexado a este empenho.")
+                st.warning("Base de dados de notas fiscais/liquidação sem registros.")
         else:
-            st.warning("Base de dados de itens da NF não possui registros.")
-    else:
-        st.caption("Base de itens físicos das Notas Fiscais não localizada para este período.")
+            st.caption("Base de liquidações não localizada para este período.")
+
+    # --- 2. Movimentações de Pagamento (Lado Direito) ---
+    with col_pag:
+        st.markdown("#### 💸 MOVIMENTAÇÕES DE PAGAMENTO")
+        arquivos_pag = obter_caminho_arquivos_modal("notas_pagamentos", ano, codigo_mun)
+        
+        if arquivos_pag:
+            df_pag = carregar_e_filtrar_modal(arquivos_pag)
+            if not df_pag.empty:
+                # Filtrando pelo empenho e município correspondente
+                df_pag_filtrado = df_pag[
+                    (df_pag['numero_empenho'].astype(str).str.strip() == num_empenho_busca) &
+                    (df_pag['codigo_municipio'].astype(str).str.strip() == cod_mun_busca)
+                ]
+                
+                if not df_pag_filtrado.empty:
+                    # Mapeando: Data, Número pagamento, Valor
+                    df_exibir_pag = pd.DataFrame()
+                    df_exibir_pag['Data'] = df_pag_filtrado['data_nota_pagamento'].apply(formatar_data_modal)
+                    df_exibir_pag['Número pagamento'] = df_pag_filtrado['numero_nota_pagamento'].astype(str)
+                    df_exibir_pag['Valor'] = df_pag_filtrado['valor_nota_pagamento'].apply(lambda x: f"R$ {formatar_moeda_modal(x)}")
+                    
+                    st.dataframe(df_exibir_pag, use_container_width=True, hide_index=True)
+                    
+                    # Quantidade e totalizadores de pagamentos
+                    total_pag = df_pag_filtrado['valor_nota_pagamento'].sum()
+                    st.markdown(
+                        f"<div style='display: flex; justify-content: space-between; font-size: 0.85rem; color: #555; font-weight: bold;'>"
+                        f"<span>Quantidade: {len(df_pag_filtrado)}</span>"
+                        f"<span>Valor total: R$ {formatar_moeda_modal(total_pag)}</span>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.warning("Nenhuma movimentação de pagamento registrada para este empenho.")
+            else:
+                st.warning("Base de dados de pagamentos sem registros.")
+        else:
+            st.caption("Base de pagamentos não localizada para este período.")
 
     st.divider()
     
