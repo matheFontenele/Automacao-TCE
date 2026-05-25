@@ -21,5 +21,5 @@ COPY . .
 # Expõe a porta do Streamlit
 EXPOSE 8501
 
-# Comando para rodar o Streamlit
-CMD ["streamlit", "run", "app.py"]
+# Comando atualizado para desenvolvimento: monitoramento ativo via Polling
+CMD ["streamlit", "run", "app.py", "--server.runOnSave", "true", "--server.fileWatcherType", "poll"]

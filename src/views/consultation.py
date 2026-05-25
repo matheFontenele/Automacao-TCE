@@ -6,6 +6,8 @@ import re
 from main import carregar_municipios
 from details_modal import exibir_modal_detalhes
 from details_modal_pagamento import exibir_modal_detalhes_pagamento
+from exportadores import renderizar_botoes_exportacao
+from details_modal import obter_caminho_arquivos_modal, carregar_e_filtrar_modal
 
 # ==============================================================================
 # CSS DOS CARDS (Otimizado e idêntico ao padrão visual do TCE)
@@ -443,7 +445,7 @@ def render_consultation_page():
                 pattern = re.compile(re.escape(term), re.IGNORECASE)
                 return pattern.sub(lambda m: f"<mark>{m.group(0)}</mark>", text_str)
 
-            limite = 15
+            limite = 20
             for index, row in df.head(limite).iterrows():
                 match_badge_html = ""
                 if 'match_reason' in row and row['match_reason']:
@@ -566,13 +568,35 @@ def render_consultation_page():
                         )
 
             if len(df) > limite:
-                st.info(f"Exibindo os {limite} primeiros resultados para garantir excelente tempo de carregamento da interface.")
+                st.info(f"Exibindo os {limite} primeiros resultados..")
 
             st.markdown("<div style='margin-bottom: 24px;'></div>", unsafe_allow_html=True)
 
             st.divider()
-            csv = df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
-            st.download_button(f"📥 Exportar Base Completa ({len(df):,} linhas)", csv, f"TCE_{filtros['prefixo']}_{filtros['ano_sel']}.csv", "text/csv", use_container_width=True)
+            # ==============================================================================
+            # BLOCO DE EXPORTAÇÃO
+            # ==============================================================================
+            st.markdown("### 📥 Opções de Exportação Avançada")
+            
+            # 1. Mantém o botão tradicional da base que está atualmente carregada na tela
+            csv_tradicional = df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig')
+            st.download_button(
+                label=f"📥 Exportar Grid Atual ({len(df):,} linhas)", 
+                data=csv_tradicional, 
+                file_name=f"TCE_{filtros['prefixo']}_{filtros['ano_sel']}.csv", 
+                mime="text/csv", 
+                use_container_width=True
+            )
+            
+            # 2. Injeta dinamicamente os novos botões lado a lado estruturando o CSV completo relacional
+            renderizar_botoes_exportacao(
+                df_empenhos_filtrados=df,                    # Base de empenhos da consulta atual
+                ano=filtros['ano_sel'],                      # Ano selecionado
+                codigo_mun=filtros['codigo_mun_busca'],      # Código do município correto para buscar os parquets
+                obter_caminho_func=obter_caminho_arquivos_modal,
+                carregar_e_filtrar_func=carregar_e_filtrar_modal
+            )
+            
         else:
             st.warning("Nenhum registro encontrado para os filtros aplicados.")
     else:

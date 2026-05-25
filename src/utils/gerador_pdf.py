@@ -31,47 +31,51 @@ def formatar_data_pdf(data_raw):
         return "Não Informada"
 
 # ==============================================================================
-# GERADOR DO PDF ATUALIZADO
+# GERADOR DO PDF ATUALIZADO E REDIMENSIONADO
 # ==============================================================================
 def gerar_pdf_empenho(row, df_liq_filtrada=None, df_pag_filtrado=None):
-    """Gera o PDF estruturado do empenho com anexos de liquidações e pagamentos."""
+    """Gera o PDF estruturado aproveitando 100% da largura útil disponível."""
     buffer = BytesIO()
+    
+    # Margens estreitas (10 pontos). Largura total útil = 612 - 20 = 592 pontos.
     doc = SimpleDocTemplate(
         buffer, 
         pagesize=letter, 
-        rightMargin=54, 
-        leftMargin=54, 
-        topMargin=54, 
-        bottomMargin=54
+        rightMargin=10, 
+        leftMargin=10, 
+        topMargin=10, 
+        bottomMargin=10
     )
     story = []
     styles = getSampleStyleSheet()
     
+    LARGURA_MAXIMA = 592  # Força as tabelas a irem até a borda da folha
+    
     title_style = ParagraphStyle(
         'DocTitle',
         parent=styles['Heading1'],
-        fontSize=15,
-        leading=18,
+        fontSize=13,
+        leading=15,
         textColor=colors.HexColor('#ff4b4b'),
-        spaceAfter=15
+        spaceAfter=8
     )
     
     section_style = ParagraphStyle(
         'SectionHeader',
         parent=styles['Heading2'],
-        fontSize=11,
-        leading=14,
+        fontSize=9.5,
+        leading=12,
         textColor=colors.HexColor('#0f172a'),
-        spaceBefore=14,
-        spaceAfter=6,
+        spaceBefore=8,
+        spaceAfter=4,
         keepWithNext=True
     )
     
     body_style = ParagraphStyle(
         'TableBody',
         parent=styles['Normal'],
-        fontSize=8.5,
-        leading=11,
+        fontSize=8,
+        leading=10,
         textColor=colors.HexColor('#334155')
     )
     
@@ -89,7 +93,6 @@ def gerar_pdf_empenho(row, df_liq_filtrada=None, df_pag_filtrado=None):
     )
 
     story.append(Paragraph(f"TCE-CE — DETALHES DO EMPENHO Nº {row.get('numero_empenho', 'N/A')}", title_style))
-    story.append(Spacer(1, 5))
     
     def criar_linha_tabela(label, valor):
         val_str = str(valor) if pd.notna(valor) and valor is not None else "Não informado"
@@ -112,11 +115,12 @@ def gerar_pdf_empenho(row, df_liq_filtrada=None, df_pag_filtrado=None):
         criar_linha_tabela("Número de licitação:", num_licitacao_str)
     ]
     
-    t_empenho = Table(dados_empenho, colWidths=[140, 360])
+    # Redimensionado: 140 + 432 = 572 (Largura máxima)
+    t_empenho = Table(dados_empenho, colWidths=[140, 432])
     t_empenho.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
         ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#f8fafc')),
-        ('PADDING', (0,0), (-1,-1), 5),
+        ('PADDING', (0,0), (-1,-1), 3),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
     story.append(t_empenho)
@@ -137,11 +141,12 @@ def gerar_pdf_empenho(row, df_liq_filtrada=None, df_pag_filtrado=None):
         criar_linha_tabela("Fonte de recurso:", row.get('fonte_recurso', 'Não Informada'))
     ]
     
-    t_orcamento = Table(dados_orcamento, colWidths=[140, 360])
+    # Redimensionado: 140 + 432 = 572
+    t_orcamento = Table(dados_orcamento, colWidths=[140, 432])
     t_orcamento.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
         ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#f8fafc')),
-        ('PADDING', (0,0), (-1,-1), 5),
+        ('PADDING', (0,0), (-1,-1), 3),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
     story.append(t_orcamento)
@@ -149,28 +154,26 @@ def gerar_pdf_empenho(row, df_liq_filtrada=None, df_pag_filtrado=None):
     # Seção 3: Histórico
     story.append(Paragraph("INFORMAÇÕES DO HISTÓRICO", section_style))
     hist_text = row.get('descricao_historico_empenho', 'Sem descrição adicional cadastrada.')
-    t_historico = Table([[Paragraph(hist_text, body_style)]], colWidths=[500])
+    t_historico = Table([[Paragraph(hist_text, body_style)]], colWidths=[LARGURA_MAXIMA])
     t_historico.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
         ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f8fafc')),
-        ('PADDING', (0,0), (-1,-1), 8),
+        ('PADDING', (0,0), (-1,-1), 4),
     ]))
     story.append(t_historico)
 
     # ==============================================================================
-    # SEÇÃO INTERMEDIÁRIA ADICIONADA: LIQUIDAÇÕES (DINÂMICA)
+    # SEÇÃO INTERMEDIÁRIA: LIQUIDAÇÕES (REDIMENSIONADA PARA 572)
     # ==============================================================================
     if df_liq_filtrada is not None and not df_liq_filtrada.empty:
         story.append(Paragraph("MOVIMENTAÇÕES DA LIQUIDAÇÃO", section_style))
         
-        # Montagem do cabeçalho da tabela de liquidações
         t_liq_dados = [[
             Paragraph("Data", header_table_style),
             Paragraph("Nº Liquidação", header_table_style),
             Paragraph("Valor", header_table_style)
         ]]
         
-        # Identificação resiliente das colunas
         col_data_liq = next((c for c in ['data_nota_liquidacao', 'data_liquidacao', 'data_emissao'] if c in df_liq_filtrada.columns), None)
         col_num_liq = next((c for c in ['numero_nota_liquidacao', 'numero_nota_fiscal', 'numero_documento'] if c in df_liq_filtrada.columns), None)
         col_valor_liq = next((c for c in ['valor_bruto_nota_liquidacao', 'valor_liquidado', 'valor_bruto', 'valor_nota_fiscal'] if c in df_liq_filtrada.columns), None)
@@ -187,25 +190,25 @@ def gerar_pdf_empenho(row, df_liq_filtrada=None, df_pag_filtrado=None):
             
             t_liq_dados.append([Paragraph(d_val, body_style), Paragraph(n_val, body_style), Paragraph(v_val, body_style)])
             
-        # Linha de Totalizador
         t_liq_dados.append([
             Paragraph(f"<b>Quantidade: {len(df_liq_filtrada)}</b>", body_style), 
             Paragraph("", body_style), 
             Paragraph(f"<b>Total: R$ {formatar_moeda_pdf(total_liq)}</b>", bold_style)
         ])
         
-        t_liq = Table(t_liq_dados, colWidths=[130, 220, 150])
+        # Redimensionado: 130 + 282 + 160 = 572
+        t_liq = Table(t_liq_dados, colWidths=[130, 282, 160])
         t_liq.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f1f5f9')),
             ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
-            ('PADDING', (0,0), (-1,-1), 5),
+            ('PADDING', (0,0), (-1,-1), 3),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ]))
         story.append(t_liq)
 
     # ==============================================================================
-    # SEÇÃO INTERMEDIÁRIA ADICIONADA: PAGAMENTOS (DINÂMICA)
+    # SEÇÃO INTERMEDIÁRIA: PAGAMENTOS (REDIMENSIONADA PARA 572)
     # ==============================================================================
     if df_pag_filtrado is not None and not df_pag_filtrado.empty:
         story.append(Paragraph("MOVIMENTAÇÕES DE PAGAMENTO", section_style))
@@ -230,19 +233,19 @@ def gerar_pdf_empenho(row, df_liq_filtrada=None, df_pag_filtrado=None):
             
             t_pag_dados.append([Paragraph(d_val, body_style), Paragraph(n_val, body_style), Paragraph(v_val, body_style)])
             
-        # Linha de Totalizador
         t_pag_dados.append([
             Paragraph(f"<b>Quantidade: {len(df_pag_filtrado)}</b>", body_style), 
             Paragraph("", body_style), 
             Paragraph(f"<b>Total: R$ {formatar_moeda_pdf(total_pag)}</b>", bold_style)
         ])
         
-        t_pag = Table(t_pag_dados, colWidths=[130, 220, 150])
+        # Redimensionado: 130 + 282 + 160 = 572
+        t_pag = Table(t_pag_dados, colWidths=[130, 282, 160])
         t_pag.setStyle(TableStyle([
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#e2e8f0')),
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#f1f5f9')),
             ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#f8fafc')),
-            ('PADDING', (0,0), (-1,-1), 5),
+            ('PADDING', (0,0), (-1,-1), 3),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ]))
         story.append(t_pag)

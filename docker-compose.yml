@@ -1,14 +1,18 @@
 services:
   app:
     build: .
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1 # Evita sujeira de cache .pyc na sua pasta local
     volumes:
-      - ./data:/app/data
+      - .:/app # Mapeia todo o seu código atual para dentro do container
+      - /app/__pycache__ # Cria um volume anônimo para o cache do container não conflitar com o local
     ports:
       - "8501:8501"
 
   extrator:
     build: .
     volumes:
-      - ./data:/app/data
+      - .:/app # Permite que alterações no extrator reflitam sem rebuild também
+      - /app/__pycache__
     command: python main.py 2024 2026
     restart: "no"

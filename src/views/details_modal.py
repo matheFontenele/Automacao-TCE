@@ -214,9 +214,11 @@ def exibir_modal_detalhes(row, categoria, ano, codigo_mun, id_unico=None):
                 df_liq['cod_mun_norm'] = normalizar_serie_pandas(df_liq['codigo_municipio'])
                 df_liq['cod_org_norm'] = normalizar_serie_pandas(df_liq['codigo_orgao'])
 
+                # Filtro de liquidações aplicando as chaves normalizadas (Numero de empenho + Codigo de municio + Código de órgão)
                 df_liq_filtrada = df_liq[
                     (df_liq['num_emp_norm'] == num_empenho_busca) &
-                    (df_liq['cod_mun_norm'] == cod_mun_busca)
+                    (df_liq['cod_mun_norm'] == cod_mun_busca) &
+                    (df_liq['cod_org_norm'] == cod_orgao_busca)
                 ]
                 
                 if not df_liq_filtrada.empty:
@@ -344,11 +346,10 @@ def exibir_modal_detalhes(row, categoria, ano, codigo_mun, id_unico=None):
     
     # Botão de download/geração do PDF
     try:
-        # Recupera as tabelas filtradas escopadas ou define None caso estejam vazias
-        enviar_liq = df_liq_filtrada if ('df_liq_filtrada' in locals() and not df_liq_filtrada.empty) else None
-        enviar_pag = df_pag_filtrado if ('df_pag_filtrado' in locals() and not df_pag_filtrado.empty) else None
+        enviar_liq = df_liq_filtrada if ('df_liq_filtrada' in locals() and df_liq_filtrada is not None and not df_liq_filtrada.empty) else None
+        enviar_pag = df_pag_filtrado if ('df_pag_filtrado' in locals() and df_pag_filtrado is not None and not df_pag_filtrado.empty) else None
         
-        # Gera o PDF injetando os dados coletados lado a lado no modal
+        # Gera o PDF injetando os dados já higienizados e filtrados
         pdf_data = gerar_pdf_empenho(row, df_liq_filtrada=enviar_liq, df_pag_filtrado=enviar_pag)
         
         st.download_button(
