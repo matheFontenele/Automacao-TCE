@@ -9,6 +9,7 @@ on:
 jobs:
   deploy_producao:
     runs-on: ubuntu-latest
+    environment: ACTIONS
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout do código
