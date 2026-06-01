@@ -3,36 +3,32 @@ name: Deploy - Automação TCE
 on:
   push:
     branches:
-      - main # deploy automático apenas para produção
-  workflow_dispatch: # permite deploy manual de qualquer branch
+      - main
 
 jobs:
   deploy_producao:
     runs-on: self-hosted
-    environment: ACTIONS
-    if: github.ref == 'refs/heads/main'
+
     steps:
       - name: Checkout do código
         uses: actions/checkout@v3
 
       - name: Deploy Produção
-        uses: appleboy/ssh-action@v0.1.8
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -x
-            echo "=== 🚀 Iniciando deploy da Automação: produção ==="
-            cd /root/automacao_api_tce || exit 1
-            git fetch origin
-            git checkout main
-            git pull origin main
+        run: |
+          set -x
+          echo "=== 🚀 Iniciando deploy ==="
 
-            echo "📦 Build e deploy Docker..."
-            docker compose up -d --build --remove-orphans
-            docker image prune -af
-            docker builder prune -af
-            docker container prune -f
+          cd /root/automacao_api_tce || exit 1
 
-            echo "✅ Deploy Automação TCE produção finalizado!"
+          git fetch origin
+          git checkout main
+          git pull origin main
+
+          echo "📦 Build e deploy Docker..."
+          docker compose up -d --build --remove-orphans
+
+          docker image prune -af
+          docker builder prune -af
+          docker container prune -f
+
+          echo "✅ Deploy finalizado!"
