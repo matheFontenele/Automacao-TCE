@@ -1,4 +1,4 @@
-name: Deploy Frontend - Controle Interno Web
+name: Deploy - Automação TCE
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
           script: |
             set -x
             echo "=== 🚀 Iniciando deploy da Automação: produção ==="
-            cd /root/controle-interno-web || exit 1
+            cd /root/automacao_api_tce || exit 1
             git fetch origin
             git checkout main
             git pull origin main
