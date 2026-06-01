@@ -18,7 +18,7 @@ jobs:
           set -x
           echo "=== 🚀 Iniciando deploy ==="
 
-          cd /root/automacao_api_tce || exit 1
+          cd "/home/administrador/Área de Trabalho/Projeto_Automacao/automacao_api_tse" || exit 1
 
           git fetch origin
           git checkout main
