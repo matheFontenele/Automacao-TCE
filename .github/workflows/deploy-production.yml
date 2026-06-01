@@ -8,7 +8,7 @@ on:
 
 jobs:
   deploy_producao:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: ACTIONS
     if: github.ref == 'refs/heads/main'
     steps:
