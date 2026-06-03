@@ -535,7 +535,7 @@ def render_extraction_page():
 
     def carregar_e_exibir_dados(tipo_arquivo_prefixo):
         pasta_dados = 'data'
-        
+    
         if not os.path.exists(pasta_dados):
             st.warning(f"📂 O diretório `{pasta_dados}` ainda não foi criado. Realize uma extração primeiro.")
             return
@@ -546,7 +546,6 @@ def render_extraction_page():
             if f.startswith(tipo_arquivo_prefixo) and f.endswith('.parquet')
         ]
 
-        # CORRIGIDO: de 'archivos' para 'arquivos'
         if not arquivos_disponiveis:
             st.warning(f"⚠️ Nenhum arquivo de `{tipo_arquivo_prefixo}` encontrado no disco.")
             st.info("Configure os parâmetros na barra lateral e clique em 'Executar Extração'.")
@@ -560,6 +559,7 @@ def render_extraction_page():
         for arq in arquivos_disponiveis:
             partes = arq.replace('.parquet', '').split('_')
             if len(partes) >= 3:
+                # Identifica a posição dos metadados independente do tamanho do prefixo
                 anos.add(partes[-3])
                 meses.add(partes[-2])
                 municipios.add(partes[-1])
@@ -588,35 +588,75 @@ def render_extraction_page():
         # Exibição do resultado filtrado
         if arquivos_filtrados:
             st.success(f"🎯 Encontrado(s) **{len(arquivos_filtrados)}** arquivo(s) correspondente(s) aos filtros.")
-            arquivo_final = st.selectbox("📄 Selecione o arquivo exato para abrir:", arquivos_filtrados, key=f"final_{tipo_arquivo_prefixo}")
             
-            caminho_completo = os.path.join(pasta_dados, arquivo_final)
+            # --- NOVO: LÓGICA DE SELEÇÃO MÚLTIPLA E MESCLAGEM ---
+            col_chk, _ = st.columns([1, 1])
+            with col_chk:
+                selecionar_todos = st.checkbox("✅ Selecionar todos os arquivos filtrados", value=False, key=f"chk_all_{tipo_arquivo_prefixo}")
             
-            # Botão de ação destacado para carregar o dataframe
-            if st.button(f"📊 Carregar e Visualizar Dados", use_container_width=True, type="primary", key=f"btn_{tipo_arquivo_prefixo}"):
-                try:
-                    with st.spinner("Decodificando base Parquet de alta performance..."):
-                        df = pd.read_parquet(caminho_completo)
-                    
-                    # Exibe métricas rápidas do arquivo carregado
-                    m1, m2 = st.columns(2)
-                    m1.metric("Total de Linhas", f"{len(df):,}".replace(",", "."))
-                    m2.metric("Total de Colunas", len(df.columns))
-                    
-                    st.markdown("### 📋 Tabela de Dados")
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                    
-                    # Download nativo do CSV convertido em tempo de execução
-                    st.download_button(
-                        label="📥 Exportar Base Completa para CSV (Excel)",
-                        data=df.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig'),
-                        file_name=arquivo_final.replace('.parquet', '.csv'),
-                        mime='text/csv',
-                        use_container_width=True,
-                        key=f"dl_{tipo_arquivo_prefixo}"
-                    )
-                except Exception as e:
-                    st.error(f"❌ Erro ao ler o arquivo Parquet: {e}")
+            if selecionar_todos:
+                arquivos_selecionados = arquivos_filtrados
+                st.info(f"📦 Todos os **{len(arquivos_filtrados)}** arquivos foram selecionados automaticamente.")
+            else:
+                arquivos_selecionados = st.multiselect(
+                    "📄 Selecione os arquivos que deseja mesclar:", 
+                    options=arquivos_filtrados,
+                    default=None,
+                    key=f"multi_{tipo_arquivo_prefixo}"
+                )
+            
+            # Botão de ação destacado para carregar e concatenar os dataframes
+            if arquivos_selecionados:
+                botao_label = f"📊 Carregar e Mesclar {len(arquivos_selecionados)} arquivo(s)"
+                
+                if st.button(botao_label, use_container_width=True, type="primary", key=f"btn_{tipo_arquivo_prefixo}"):
+                    try:
+                        with st.spinner("Decodificando e concatenando bases Parquet de alta performance..."):
+                            lista_dfs = []
+                            
+                            # Itera por cada arquivo selecionado, lê e joga na lista
+                            for arquivo in arquivos_selecionados:
+                                caminho_completo = os.path.join(pasta_dados, arquivo)
+                                df_individual = pd.read_parquet(caminho_completo)
+                                
+                                # Garante que não vai quebrar se algum parquet estiver vazio por acidente
+                                if not df_individual.empty:
+                                    lista_dfs.append(df_individual)
+                            
+                            if lista_dfs:
+                                # Junta tudo em um único DataFrame gigante mantendo o padrão das colunas
+                                df_final = pd.concat(lista_dfs, ignore_index=True)
+                                
+                                # Exibe métricas rápidas consolidadas
+                                m1, m2 = st.columns(2)
+                                m1.metric("Total de Linhas Combinadas", f"{len(df_final):,}".replace(",", "."))
+                                m2.metric("Total de Colunas", len(df_final.columns))
+                                
+                                st.markdown("### 📋 Tabela de Dados Combinada (Amostra)")
+                                st.dataframe(df_final, use_container_width=True, hide_index=True)
+                                
+                                # Define um nome inteligente e limpo para o arquivo de download
+                                nome_download = f"consolidado_{tipo_arquivo_prefixo}"
+                                if ano_sel != "Todos": nome_download += f"_{ano_sel}"
+                                if mun_sel != "Todos": nome_download += f"_{mun_sel}"
+                                nome_download += ".csv"
+                                
+                                # Download nativo do CSV unificado convertido em tempo de execução
+                                st.download_button(
+                                    label="📥 Exportar Base unificada para CSV (Excel)",
+                                    data=df_final.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig'),
+                                    file_name=nome_download,
+                                    mime='text/csv',
+                                    use_container_width=True,
+                                    key=f"dl_{tipo_arquivo_prefixo}"
+                                )
+                            else:
+                                st.warning("⚠️ Os arquivos selecionados estavam sem registros válidos para combinar.")
+                                
+                    except Exception as e:
+                        st.error(f"❌ Erro crítico ao processar/mesclar os arquivos Parquet: {e}")
+            else:
+                st.info("💡 Escolha os arquivos acima ou marque 'Selecionar todos os arquivos filtrados' para gerar a exportação unificada.")
         else:
             st.error("❌ Nenhum arquivo encontrado para a combinação de filtros selecionada.")
 
