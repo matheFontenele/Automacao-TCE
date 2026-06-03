@@ -50,34 +50,65 @@ def formatar_log_terminal(msg: str) -> str:
     VERMELHO = "\033[31m"
     AZUL = "\033[34m"
     CYAN = "\033[36m"
+    NEGRITO = "\033[1m"
 
     if "Iniciando extração" in msg or "Total de tarefas" in msg:
         return f"{AZUL}⚡ {msg}{RESET}"
         
     if "Resumo:" in msg:
-        return f"\n{CYAN}📊 {msg}{RESET}\n"
+        return f"\n{CYAN}{NEGRITO}📊 {msg}{RESET}\n"
 
-    # Trata qualquer arquivo dinamicamente sem depender de "empenhos_"
-    if "💾 Salvo:" in msg:
-        conteudo = msg.replace("💾 Salvo:", "").strip()
+    if "🚨 [ALERTA]" in msg:
+        return f"{AMARELO}{NEGRITO}{msg}{RESET}"
+
+    # 🟢 SUCESSO (Criado com sucesso)
+    if "✅ Criado com sucesso:" in msg:
+        conteudo = msg.replace("✅ Criado com sucesso:", "").strip()
         partes = conteudo.split(" ")
         nome_arq = partes[0]
-        detalhes = " ".join(partes[1:]) if len(partes) > 1 else ""
-        return f"{VERDE}│ 🟢 [SALVO]    │{RESET} {nome_arq:<60} {VERDE}│{RESET} {detalhes}"
+        detalhes = " ".join(partes[1:]) if len(partes) > 1 else "Salvo."
+        return f"{VERDE}│ 🟢 [SALVO]    │{RESET} {nome_arq:<65} {VERDE}│{RESET} {detalhes}"
 
+    # 🟡 IGNORADO (Arquivo já existente)
     if "⏭️ Ignorado:" in msg:
         conteudo = msg.replace("⏭️ Ignorado:", "").replace("já existe.", "").strip()
-        return f"{AMARELO}│ 🟡 [IGNORADO] │{RESET} {conteudo:<60} {AMARELO}│{RESET} Já em disco"
+        return f"{AMARELO}│ 🟡 [IGNORADO] │{RESET} {conteudo:<65} {AMARELO}│{RESET} Já em disco"
 
-    if "📭 Sem dados:" in msg:
-        conteudo = msg.replace("📭 Sem dados:", "").strip()
-        partes = conteudo.split(" ")
+    # 🔵 VAZIO (Sem dados ou descartado por ano)
+    if "⚠️ Vazio:" in msg:
+        conteudo = msg.replace("⚠️ Vazio:", "").strip()
+        partes = conteudo.split(" - ")
         nome_arq = partes[0]
-        detalhes = " ".join(partes[1:]) if len(partes) > 1 else ""
-        return f"{AZUL}│ 🔵 [VAZIO]    │{RESET} {nome_arq:<60} {AZUL}│{RESET} {detalhes if detalhes else 'Sem registros'}"
+        detalhes = partes[1] if len(partes) > 1 else "Sem registros no TCE"
+        return f"{AZUL}│ 🔵 [VAZIO]    │{RESET} {nome_arq:<65} {AZUL}│{RESET} {detalhes}"
 
+    # 🔴 FALHA (Tratamento dinâmico de erros de conexão/API)
     if "❌" in msg or "Erro" in msg:
-        return f"{VERMELHO}🚨 [FALHA]     │ {msg}{RESET}"
+        conteudo = msg.replace("❌", "").strip()
+        nome_arq = "Erro de Processamento"
+        detalhes = conteudo
+
+        # Captura o nome do arquivo dinamicamente de dentro da mensagem de erro
+        if "em " in conteudo:
+            partes_em = conteudo.split("em ")
+            detalhes = partes_em[0].strip()
+            restante = partes_em[1].split(":")
+            nome_arq = restante[0].strip()
+            if len(restante) > 1:
+                detalhes += " -> " + ":".join(restante[1:]).strip()
+        elif "para " in conteudo:
+            partes_para = conteudo.split("para ")
+            detalhes = partes_para[0].strip()
+            restante = partes_para[1].split(":")
+            nome_arq = restante[0].strip()
+            if len(restante) > 1:
+                detalhes += " -> " + ":".join(restante[1:]).strip()
+
+        # Encurta a mensagem técnica de SSL/EOF para manter o terminal scannable
+        if "SSLEOFError" in detalhes or "Max retries exceeded" in detalhes:
+            detalhes = "Conexão abortada pelo Firewall do TCE (SSL UNEXPECTED_EOF)"
+
+        return f"{VERMELHO}│ 🔴 [FALHA]    │{RESET} {nome_arq:<65} {VERMELHO}│{RESET} {VERMELHO}{detalhes}{RESET}"
 
     return msg
 
@@ -172,12 +203,20 @@ def renderizar_aba_consulta(tipo_dado_selecionado):
 # Cria um armazenamento local por thread para garantir isolamento e thread-safety
 thread_local = threading.local()
 
-def obter_sessao():
+def obter_sessao(forcar_nova=False):
+    # Se forçado, deleta a sessão antiga do escopo local da Thread
+    if forcar_nova and hasattr(thread_local, "session"):
+        try:
+            thread_local.session.close()
+        except:
+            pass
+        delattr(thread_local, "session")
+
     if not hasattr(thread_local, "session"):
         thread_local.session = requests.Session()
-        # Configura uma estratégia de reativação automática de conexões
         adapter = requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=1)
         thread_local.session.mount('https://', adapter)
+        
     return thread_local.session
 
 # Função que processa cada tarefa individualmente, responsável por fazer a requisição, aplicar o filtro defensivo e salvar o arquivo parquet
@@ -194,6 +233,13 @@ def processar_lote(task):
     # Recupera a sessão persistente da thread atual
     session = obter_sessao()
 
+    # Header amigável para evitar bloqueio por WAF/Firewall simples
+    headers_requisicao = {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Connection": "keep-alive"
+    }
+
     try:
         todos_dados = []
         start_index = task['params'].get('$start_index', 0)
@@ -209,16 +255,24 @@ def processar_lote(task):
             
             for tentativa in range(max_tentativas):
                 try:
-                    response = requests.get(task['url'], headers={"Accept": "application/json"}, params=task['params'], timeout=45)
-                    break  # Conectou com sucesso? Sai do loop de retentativa e segue para a validação do status
-                except (requests.exceptions.RequestException, Exception) as e:
+                    response = session.get(
+                        task['url'], 
+                        headers=headers_requisicao, 
+                        params=task['params'], 
+                        timeout=45
+                    )
+                    break  # Conectou com sucesso? Sai do loop de retentativa
+                except (requests.exceptions.SSLError, requests.exceptions.RequestException) as e:
                     if tentativa == max_tentativas - 1:
-                        # Se foi a última tentativa e continuou falhando, retorna o erro definitivo de conexão
                         return "ERRO_CONEXAO", f"❌ Derrubado pelo TCE após {max_tentativas} tentativas em {nome_arquivo}: {str(e)}"
                     
-                    # Espera um tempo que dobra a cada erro (2s, 4s...) antes de tentar de novo
-                    tempo_espera = (tentativa + 1) * 5
+                    # Se deu erro de SSL/Conexão, fechamos a conexão atual para não travar o pool
+                    # e forçamos o backoff exponencial mais agressivo
+                    tempo_espera = (tentativa + 1) * 7
                     time.sleep(tempo_espera)
+                    
+                    # Recarrega uma sessão limpa caso a anterior tenha sido "sujada" pelo handshake quebrado
+                    session = obter_sessao(forcar_nova=True)
             
             # Executa a validação se a resposta de rede foi bem-sucedida
             if response and response.status_code == 200:
@@ -233,7 +287,7 @@ def processar_lote(task):
                     break
                 
                 start_index += count_limite  # Avança o ponteiro para a próxima página
-                time.sleep(0.3)
+                time.sleep(0.5)  # Aumentado levemente para dar respiro ao servidor deles entre páginas
             else:
                 status_atual = response.status_code if response is not None else "Sem Resposta"
                 return "ERRO_API", f"❌ Erro na API para {nome_arquivo}: Status {status_atual}"
@@ -242,7 +296,7 @@ def processar_lote(task):
             df = pd.DataFrame(todos_dados)
             
             # ==============================================================
-            # 🛡️ FILTRO DEFENSIVO ADAPTADO (Usa a nova chave 'ano_referencia')
+            # 🛡️ FILTRO DEFENSIVO ADAPTADO
             # ==============================================================
             ano_esperado = str(task['ano_referencia'])
             if 'exercicio_orcamento' in df.columns:
@@ -261,7 +315,7 @@ def processar_lote(task):
         return "VAZIO", f"⚠️ Vazio: {nome_arquivo} - Sem registros no TCE."
 
     except Exception as e:
-        return "ERRO_CONEXAO", f"❌ Erro em {nome_arquivo}: {str(e)}"
+        return "ERRO_CONEXAO", f"❌ Erro inesperado em {nome_arquivo}: {str(e)}"
 
 # Gera a lista de tarefas a partir dos filtros aplicados na interface do Streamlit
 def gerar_tarefas(ano, municipio_selecionado, endpoints_alvo=None):
