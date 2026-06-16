@@ -1,4 +1,5 @@
 import streamlit as st
+import numpy as np
 import pandas as pd
 import io
 
@@ -67,6 +68,36 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano, codigo_mun, obter_cami
     # 5. Cruzar a estrutura de movimentos de volta com os cabeçalhos dos Empenhos
     df_consolidado = pd.merge(df_empenhos_filtrados, df_movimentos, on=chaves, how='left')
 
+    # 6. Adição de colunas referentes a prazo e pagamentos
+    dt_liqui = pd.to_datetime(df_consolidado.get('data_liquidacao'), errors='coerce')
+    dt_pag = pd.to_datetime(df_consolidado.get('data_nota_pagamento'), errors='coerce')
+    
+    # Regra: Prazo limite para pagamento é de 30 dias após a liquidação
+    df_consolidado['data_prevista_pagamento'] = (dt_liqui + pd.Timedelta(days=30)).dt.strftime('%Y-%m-%d')
+
+    # Status de Finalização do Fluxo
+    df_consolidado['status_execucao'] = np.where(
+        dt_pag.notna(), 
+        'FINALIZADO', 
+        np.where(dt_liqui.notna(), 'PENDENTE (AGUARDANDO PAGAMENTO)', 'EMPENHADO (NÃO LIQUIDADO)')
+    )
+
+    # Cálculo dos Dias em Atraso
+    hoje = pd.Timestamp.now().normalize()
+    prazo_limite = dt_liqui + pd.Timedelta(days=30)
+
+    # Dias decorridos se já pago VS se está pendente hoje
+    atraso_se_pago = (dt_pag - prazo_limite).dt.days
+    atraso_se_pendente = (hoje - prazo_limite).dt.days
+
+    df_consolidado['dias_atraso'] = np.where(
+        dt_pag.notna(),
+        atraso_se_pago,
+        np.where(dt_liqui.notna(), atraso_se_pendente, 0)
+    )
+    # Garante que se pagou antes do prazo, o atraso seja zero (não número negativo)
+    df_consolidado['dias_atraso'] = df_consolidado['dias_atraso'].clip(lower=0).fillna(0).astype(int)
+
     # ==============================================================================
     # MAREAMENTO E TRATAMENTO DE SINÔNIMOS DOS CAMPOS SOLICITADOS
     # ==============================================================================
@@ -93,24 +124,62 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano, codigo_mun, obter_cami
     if 'numero_documento_caixa' in df_consolidado.columns:
         df_consolidado['nu_documento_caixa'] = df_consolidado['numero_documento_caixa']
 
-    # 6. Estrutura rígida de saída das 30 colunas
+    # 6. Estrutura rígida de saída das colunas (Ordenação Cronológica e Intuitiva)
     colunas_solicitadas = [
-        # Base Empenho
-        'codigo_municipio', 'exercicio_orcamento', 'codigo_orgao', 'codigo_unidade',
-        'data_emissao_empenho', 'numero_empenho', 'data_referencia_empenho',
-        'codigo_elemento_despesa', 'modalidade_empenho', 'descricao_empenho',
-        'valor_anterior_saldo_dotacao', 'valor_empenhado', 'valor_atual_saldo_dotacao',
-        'nome_negociante',
-        # Base Pagamento
-        'numero_nota_pagamento', 'data_referencia', 'nu_documento_caixa',
-        'data_nota_pagamento', 'valor_nota_pagamento', 'valor_empenhado_a_pagar',
-        # Base Notas Fiscais
-        'tipo_nota_fiscal', 'numero_nota_fiscal', 'data_emissao', 'valor_liquido',
-        'valor_desconto', 'valor_bruto', 'valor_aliquota_iss', 'valor_base_calculo_iss',
-        # Base Liquidações
-        'data_liquidacao', 'data_referencia_liquidacao', 'valor_liquidado'
+        # ==============================================================================
+        # 1. CONTEXTO E IDENTIFICAÇÃO (Onde e Quando?)
+        # ==============================================================================
+        'codigo_municipio', 
+        'exercicio_orcamento', 
+        'codigo_orgao', 
+        'codigo_unidade',
+        
+        # ==============================================================================
+        # 2. FASE DE EMPENHO (Quem comprou, o que comprou e quanto reservou?)
+        # ==============================================================================
+        'numero_empenho', 
+        'data_emissao_empenho', 
+        'data_referencia_empenho',
+        'modalidade_empenho', 
+        'codigo_elemento_despesa', 
+        'nome_negociante', 
+        'descricao_empenho',
+        'valor_anterior_saldo_dotacao', 
+        'valor_empenhado', 
+        'valor_atual_saldo_dotacao',
+        
+        # ==============================================================================
+        # 3. FASE DE LIQUIDAÇÃO E NOTA FISCAL (O serviço foi entregue? Cadê o documento?)
+        # ==============================================================================
+        'data_liquidacao', 
+        'data_referencia_liquidacao', 
+        'tipo_nota_fiscal', 
+        'numero_nota_fiscal', 
+        'data_emissao',             # Data de emissão da NF
+        'valor_bruto', 
+        'valor_desconto', 
+        'valor_liquido', 
+        'valor_liquidado', 
+        'valor_base_calculo_iss', 
+        'valor_aliquota_iss',
+        
+        # ==============================================================================
+        # 4. FASE DE PAGAMENTO (O dinheiro saiu do banco?)
+        # ==============================================================================
+        'numero_nota_pagamento', 
+        'data_nota_pagamento', 
+        'data_referencia',          # Referência do pagamento
+        'nu_documento_caixa', 
+        'valor_nota_pagamento', 
+        'valor_empenhado_a_pagar',
+        
+        # ==============================================================================
+        # 5. AUDITORIA E MÉTRICAS DE CONTROLE (Qual a situação atual desse processo?)
+        # ==============================================================================
+        'status_execucao', 
+        'data_prevista_pagamento', 
+        'dias_atraso'
     ]
-
     # Preenche colunas ausentes com None para evitar KeyErrors
     for col in colunas_solicitadas:
         if col not in df_consolidado.columns:
@@ -132,7 +201,7 @@ def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_c
     if df_empenhos_filtrados.empty:
         return
 
-    col_json, col_csv = st.columns(2)
+    col_json, col_xlsx = st.columns(2)
 
     with col_json:
         try:
@@ -152,24 +221,38 @@ def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_c
         except Exception as e:
             st.error(f"Erro ao gerar JSON: {e}")
 
-    with col_csv:
+    with col_xlsx:
         try:
             with st.spinner("Compilando e cruzando dados relacionais da planilha..."):
                 df_detalhado = gerar_dataframe_detalhado(
                     df_empenhos_filtrados, ano, codigo_mun, 
                     obter_caminho_func, carregar_e_filtrar_func
                 )
+
+                # 2. Aplica a estilização visual (Cores) nas colunas de controle do final do arquivo
+                df_colorido = df_detalhado.style.set_properties(
+                    **{'background-color': '#FFF2CC'}, # AMARELO
+                    subset=['status_execucao', 'data_prevista_pagamento']
+                ).set_properties(
+                    **{'background-color': '#FCE4D6'}, # VERMELHO
+                    subset=['dias_atraso']
+                ).set_properties(
+                    **{'background-color': '#DDEBF7'}, # AZUL
+                    subset=['codigo_municipio', 'exercicio_orcamento', 'codigo_unidade', 'data_emissao_empenho']
+                )
                 
-                # Conversão com o buffer em utf-8-sig para abrir direto no Excel em português sem quebrar acentos
-                csv_buffer = io.StringIO()
-                df_detalhado.to_csv(csv_buffer, index=False, sep=";", encoding="utf-8-sig")
+                # Conversão utilizando openpyxl para manter os estilos inseridos acima
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    df_colorido.to_excel(writer, index=False, sheet_name='Auditoria_TCE')
                 
+                # Correção aplicada aqui: Removido o 'mime' duplicado e adicionado o 'file_name' de saída
                 st.download_button(
-                    label="📊 Exportar CSV Detalhado (Relacional)",
-                    data=csv_buffer.getvalue(),
-                    file_name=f"detalhado_empenhos_{codigo_mun}_{ano}.csv",
-                    mime="text/csv",
+                    label="📊 Exportar Excel Detalhado (Relacional)",
+                    data=excel_buffer.getvalue(),
+                    file_name=f"auditoria_empenhos_{codigo_mun}_{ano}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
         except Exception as e:
-            st.error(f"Erro ao gerar CSV Detalhado: {e}")
+            st.error(f"Erro ao gerar Excel Detalhado: {e}")
