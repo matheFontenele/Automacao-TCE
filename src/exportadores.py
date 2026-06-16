@@ -232,13 +232,16 @@ def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_c
                 # 2. Aplica a estilização visual (Cores) nas colunas de controle do final do arquivo
                 df_colorido = df_detalhado.style.set_properties(
                     **{'background-color': '#FFF2CC'}, # AMARELO
-                    subset=['status_execucao', 'data_prevista_pagamento']
+                    subset=['numero_nota_pagamento', 'data_nota_pagamento', 'valor_nota_pagamento']
                 ).set_properties(
                     **{'background-color': '#FCE4D6'}, # VERMELHO
-                    subset=['dias_atraso']
+                    subset=['codigo_municipio', 'codigo_orgao', 'dias_atraso', 'codigo_unidade', 'data_prevista_pagamento', 'numero_empenho', 'codigo_elemento_despesa', 'valor_empenhado', 'nome_negociante', 'valor_empenhado_a_pagar']
                 ).set_properties(
                     **{'background-color': '#DDEBF7'}, # AZUL
-                    subset=['codigo_municipio', 'exercicio_orcamento', 'codigo_unidade', 'data_emissao_empenho']
+                    subset=['numero_nota_pagamento', 'nu_documento_caixa']
+                ).set_properties(
+                    **{'background-color': '#E2EFDA'}, # VERDE
+                    subset=['data_liquidacao', 'valor_liquidado']
                 )
                 
                 # Conversão utilizando openpyxl para manter os estilos inseridos acima
