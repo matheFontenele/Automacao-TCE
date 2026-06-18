@@ -233,8 +233,8 @@ def render_consultation_page():
             ).strip()
             
             filtro_fornecedor = col_forn.text_input(
-                "Fornecedor / Credor",
-                placeholder="Nome, Razão Social, CPF ou CNPJ...",
+                "Fornecedor (Para mais de um fornecedor, separe por virgula)",
+                placeholder="Ex: CAGECE, ENEL, CNPJ (separe por vírgula)...",
                 label_visibility="visible"
             ).strip()
             
@@ -423,15 +423,27 @@ def render_consultation_page():
 
         # --- APLICAÇÃO EXCLUSIVA DO FILTRO DE FORNECEDOR ---
         if filtro_fornecedor and not df.empty:
-            termo_forn = str(filtro_fornecedor).strip()
-            colunas_fornecedores = ['nome_negociante', 'numero_documento_negociante', 'nome_responsavel_pagamento', 'cpf_cnpj_emitente', 'nome_emitente', 'razao_social']
-            mask_forn = pd.Series(False, index=df.index)
+            # Quebra a string por vírgula e remove espaços extras de cada termo
+            termos_forn = [t.strip() for t in filtro_fornecedor.split(",") if t.strip()]
             
-            for col in colunas_fornecedores:
-                if col in df.columns:
-                    mask_forn |= df[col].astype(str).str.contains(termo_forn, case=False, na=False)
+            colunas_fornecedores = [
+                'nome_negociante', 'numero_documento_negociante', 
+                'nome_responsavel_pagamento', 'cpf_cnpj_emitente', 
+                'nome_emitente', 'razao_social'
+            ]
             
-            df = df[mask_forn]
+            mask_forn_global = pd.Series(False, index=df.index)
+
+            for termo in termos_forn:
+                mask_termo = pd.Series(False, index=df.index)
+                
+                for col in colunas_fornecedores:
+                    if col in df.columns:
+                        mask_termo |= df[col].astype(str).str.contains(termo, case=False, na=False)
+                
+                mask_forn_global |= mask_termo
+            
+            df = df[mask_forn_global]
 
         st.session_state.df_resultado = df
         st.session_state.consulta_realizada = True
