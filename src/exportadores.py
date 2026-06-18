@@ -15,7 +15,7 @@ def normalizar_coluna_chave(df, coluna):
     )
     return df
 
-def gerar_dataframe_detalhado(df_empenhos_filtrados, ano, codigo_mun, obter_caminho_func, carregar_e_filtrar_func):
+def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, codigo_mun, obter_caminho_func, carregar_e_filtrar_func):
     """
     Gera o DataFrame detalhado combinando empenhos, liquidações/notas fiscais e pagamentos
     de forma sequencial (alinhada), evitando a explosão de linhas por produto cartesiano.
@@ -23,15 +23,28 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano, codigo_mun, obter_cami
     if df_empenhos_filtrados is None or df_empenhos_filtrados.empty:
         return pd.DataFrame()
 
-    # 1. Carregar bases correlatas
-    arq_fiscais = obter_func_segura(obter_caminho_func, "notas_fiscais", ano, codigo_mun)
-    if not arq_fiscais:
-        arq_fiscais = obter_func_segura(obter_caminho_func, "liquidacoes", ano, codigo_mun)
-        
-    arq_pag = obter_func_segura(obter_caminho_func, "notas_pagamentos", ano, codigo_mun)
+    # 1. Carregar bases correlatas em loop para varrer todo o intervalo de anos
+    dfs_nf_acumulados = []
+    dfs_pag_acumulados = []
 
-    df_nf = carregar_e_filtrar_func(arq_fiscais)
-    df_pag = carregar_e_filtrar_func(arq_pag)
+    for ano_corrente in range(int(ano_inicial), int(ano_final) + 1):
+        arq_fiscais = obter_func_segura(obter_caminho_func, "notas_fiscais", ano_corrente, codigo_mun)
+        if not arq_fiscais:
+            arq_fiscais = obter_func_segura(obter_caminho_func, "liquidacoes", ano_corrente, codigo_mun)
+            
+        arq_pag = obter_func_segura(obter_caminho_func, "notas_pagamentos", ano_corrente, codigo_mun)
+
+        df_nf_ano = carregar_e_filtrar_func(arq_fiscais)
+        df_pag_ano = carregar_e_filtrar_func(arq_pag)
+
+        if df_nf_ano is not None and not df_nf_ano.empty:
+            dfs_nf_acumulados.append(df_nf_ano)
+        if df_pag_ano is not None and not df_pag_ano.empty:
+            dfs_pag_acumulados.append(df_pag_ano)
+
+    # Consolida as listas em DataFrames únicos contendo todos os anos do intervalo
+    df_nf = pd.concat(dfs_nf_acumulados, ignore_index=True) if dfs_nf_acumulados else pd.DataFrame()
+    df_pag = pd.concat(dfs_pag_acumulados, ignore_index=True) if dfs_pag_acumulados else pd.DataFrame()
 
     # Chaves primárias de agrupamento do TCE-CE
     chaves = ['numero_empenho', 'codigo_municipio', 'codigo_orgao']
@@ -194,7 +207,14 @@ def obter_func_segura(func, prefixo, ano, codigo_mun):
         return func(prefixo, ano, codigo_mun)
     except:
         return []
-def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_caminho_func, carregar_e_filtrar_func):
+def renderizar_botoes_exportacao(
+    df_empenhos_filtrados,
+    ano_inicial,
+    ano_final,
+    codigo_mun,
+    obter_caminho_func,
+    carregar_e_filtrar_func
+):
     """Gera a interface visual dos botões lado a lado no Streamlit."""
     if df_empenhos_filtrados.empty:
         return
@@ -212,7 +232,7 @@ def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_c
             st.download_button(
                 label="📦 Exportar Grid em JSON",
                 data=json_string,
-                file_name=f"empenhos_export_{codigo_mun}_{ano}.json",
+                file_name=f"empenhos_export_{codigo_mun}_{ano_inicial}_a_{ano_final}.json",
                 mime="application/json",
                 use_container_width=True
             )
@@ -223,9 +243,10 @@ def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_c
         try:
             with st.spinner("Compilando e cruzando dados relacionais da planilha..."):
                 df_detalhado = gerar_dataframe_detalhado(
-                    df_empenhos_filtrados, ano, codigo_mun, 
+                    df_empenhos_filtrados, ano_inicial, ano_final, codigo_mun, 
                     obter_caminho_func, carregar_e_filtrar_func
                 )
+                df_detalhado = df_detalhado.fillna('')
 
                 # 2. Aplica a estilização visual (Cores) nas colunas de controle do final do arquivo
                 df_colorido = df_detalhado.style.set_properties(
@@ -251,7 +272,7 @@ def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_c
                 st.download_button(
                     label="📊 Exportar Excel Detalhado (Relacional)",
                     data=excel_buffer.getvalue(),
-                    file_name=f"auditoria_empenhos_{codigo_mun}_{ano}.xlsx",
+                    file_name=f"auditoria_empenhos_{codigo_mun}_{ano_inicial}_a_{ano_final}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )

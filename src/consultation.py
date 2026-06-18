@@ -586,7 +586,7 @@ def render_consultation_page():
                         exibir_modal_detalhes_pagamento(
                             row, 
                             filtros['categoria_sel'], 
-                            filtros['ano_sel'], 
+                            filtros['ano_inicial'], 
                             filtros['codigo_mun_busca'],
                             id_unico=index
                         )
@@ -594,7 +594,7 @@ def render_consultation_page():
                         exibir_modal_detalhes(
                             row, 
                             filtros['categoria_sel'], 
-                            filtros['ano_sel'], 
+                            filtros['ano_inicial'], 
                             filtros['codigo_mun_busca'],
                             id_unico=index
                         )
@@ -621,11 +621,12 @@ def render_consultation_page():
             
             # Repassando o ano final ou os novos parâmetros ao exportador relacional
             renderizar_botoes_exportacao(
-                df_empenhos_filtrados=df,                    
-                ano=filtros['ano_final'],                      
-                codigo_mun=filtros['codigo_mun_busca'],      
-                obter_caminho_func=obter_caminho_arquivos_modal,
-                carregar_e_filtrar_func=carregar_e_filtrar_modal
+                df_empenhos_filtrados=df, 
+                ano_inicial=filtros['ano_inicial'], 
+                ano_final=filtros['ano_final'], 
+                codigo_mun=filtros['codigo_mun_busca'],
+                obter_caminho_func=obter_caminho_arquivos_modal, 
+                carregar_e_filtrar_func=carregar_e_filtrar_modal 
             )
             
         else:
