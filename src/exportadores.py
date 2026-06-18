@@ -91,8 +91,8 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
     # Status de Finalização do Fluxo
     df_consolidado['status_execucao'] = np.where(
         dt_pag.notna(), 
-        'FINALIZADO', 
-        np.where(dt_liqui.notna(), 'PENDENTE (AGUARDANDO PAGAMENTO)', 'EMPENHADO (NÃO LIQUIDADO)')
+        'PAGO', 
+        np.where(dt_liqui.notna(), 'PENDENTE', 'EMPENHADO')
     )
 
     # Cálculo dos Dias em Atraso
