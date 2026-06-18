@@ -255,21 +255,89 @@ def render_consultation_page():
         if municipio_sel != "Todos":
             codigo_mun_busca = opcoes_mun[municipio_sel]['codigo_municipio']
 
-        # --- CARREGAMENTO EM LOOP PARA SUPORTAR O INTERVALO DE ANOS ---
+                # --- CARREGAMENTO EM LOOP PARA SUPORTAR O INTERVALO DE ANOS ---
         dfs_anos = []
+        liq_map = {}
+        pag_map = {}
         
+        if categoria_sel == "Notas de Empenho":
+            df_liq_global = pd.DataFrame()
+            df_pg_global = pd.DataFrame()
+            
+            # 1. Acumula dados de liquidação e pagamento de todos os anos do intervalo
+            for ano_corrente in range(int(ano_inicial), int(ano_final) + 1):
+                arq_liq = obter_caminho_arquivos("liquidacoes", ano_corrente, codigo_mun_busca)
+                df_liq_ano = carregar_e_filtrar(arq_liq)
+                if not df_liq_ano.empty:
+                    df_liq_global = pd.concat([df_liq_global, df_liq_ano], ignore_index=True)
+                
+                arq_pg = obter_caminho_arquivos("notas_pagamentos", ano_corrente, codigo_mun_busca)
+                df_pg_ano = carregar_e_filtrar(arq_pg)
+                if not df_pg_ano.empty:
+                    df_pg_global = pd.concat([df_pg_global, df_pg_ano], ignore_index=True)
+            
+            # 2. Processa e agrega Liquidações Globais
+            if not df_liq_global.empty:
+                df_liq_global['codigo_municipio'] = df_liq_global['codigo_municipio'].astype(str)
+                df_liq_global['codigo_orgao'] = df_liq_global['codigo_orgao'].astype(str)
+                df_liq_global['numero_empenho'] = df_liq_global['numero_empenho'].astype(str)
+                
+                # Inclui o exercício na chave para evitar colisão de empenhos com mesmo número em anos diferentes
+                if 'exercicio_orcamento' in df_liq_global.columns:
+                    df_liq_global['exercicio_ref'] = df_liq_global['exercicio_orcamento'].astype(str)
+                elif 'exercicio_empenho' in df_liq_global.columns:
+                    df_liq_global['exercicio_ref'] = df_liq_global['exercicio_empenho'].astype(str)
+                else:
+                    df_liq_global['exercicio_ref'] = "" 
+                
+                df_liq_global['chave_composta'] = (df_liq_global['codigo_municipio'].str.strip() + "_" + 
+                                                   df_liq_global['exercicio_ref'].str.strip() + "_" + 
+                                                   df_liq_global['codigo_orgao'].str.strip() + "_" + 
+                                                   df_liq_global['numero_empenho'].str.strip())
+                
+                col_valor_liq = None
+                if 'valor_bruto_nota_liquidacao' in df_liq_global.columns:
+                    col_valor_liq = 'valor_bruto_nota_liquidacao'
+                elif 'valor_liquidado' in df_liq_global.columns:
+                    col_valor_liq = 'valor_liquidado'
+                elif 'valor_bruto' in df_liq_global.columns:
+                    col_valor_liq = 'valor_bruto'
+                    
+                if col_valor_liq:
+                    df_liq_global[col_valor_liq] = pd.to_numeric(df_liq_global[col_valor_liq], errors='coerce').fillna(0.0)
+                    liq_map = df_liq_global.groupby('chave_composta')[col_valor_liq].sum().to_dict()
+
+            # 3. Processa e agrega Pagamentos Globais
+            if not df_pg_global.empty:
+                df_pg_global['codigo_municipio'] = df_pg_global['codigo_municipio'].astype(str)
+                df_pg_global['codigo_orgao'] = df_pg_global['codigo_orgao'].astype(str)
+                df_pg_global['numero_empenho'] = df_pg_global['numero_empenho'].astype(str)
+                
+                if 'exercicio_orcamento' in df_pg_global.columns:
+                    df_pg_global['exercicio_ref'] = df_pg_global['exercicio_orcamento'].astype(str)
+                elif 'exercicio_empenho' in df_pg_global.columns:
+                    df_pg_global['exercicio_ref'] = df_pg_global['exercicio_empenho'].astype(str)
+                else:
+                    df_pg_global['exercicio_ref'] = ""
+                    
+                df_pg_global['chave_composta'] = (df_pg_global['codigo_municipio'].str.strip() + "_" + 
+                                                  df_pg_global['exercicio_ref'].str.strip() + "_" + 
+                                                  df_pg_global['codigo_orgao'].str.strip() + "_" + 
+                                                  df_pg_global['numero_empenho'].str.strip())
+                
+                df_pg_global['valor_nota_pagamento'] = pd.to_numeric(df_pg_global['valor_nota_pagamento'], errors='coerce').fillna(0.0)
+                pag_map = df_pg_global.groupby('chave_composta')['valor_nota_pagamento'].sum().to_dict()
+
+        # 4. Loop principal para carregar os empenhos (ou outras categorias)
         for ano_corrente in range(int(ano_inicial), int(ano_final) + 1):
             arquivos = obter_caminho_arquivos(prefixo, ano_corrente, codigo_mun_busca)
-            
             if not arquivos:
                 continue
                 
             df_ano = carregar_e_filtrar(arquivos)
-            
             if df_ano.empty:
                 continue
 
-            # Aplica filtro de município por ano se necessário
             if municipio_sel != "Todos" and 'municipio_referencia' in df_ano.columns:
                 nome_municipio_real = opcoes_mun[municipio_sel]['nome_municipio']
                 df_ano = df_ano[df_ano['municipio_referencia'].str.upper() == nome_municipio_real.upper()]
@@ -279,51 +347,22 @@ def render_consultation_page():
 
             df_ano['match_reason'] = "" 
 
-            # Agregações específicas (Liquidações e Pagamentos) resolvidas ano a ano
             if categoria_sel == "Notas de Empenho":
                 df_ano['codigo_municipio'] = df_ano['codigo_municipio'].astype(str)
                 df_ano['codigo_orgao'] = df_ano['codigo_orgao'].astype(str)
                 df_ano['numero_empenho'] = df_ano['numero_empenho'].astype(str)
-                df_ano['chave_composta'] = df_ano['codigo_municipio'].str.strip() + "_" + df_ano['codigo_orgao'].str.strip() + "_" + df_ano['numero_empenho'].str.strip()
                 
-                # Liquidações do ano corrente
-                arq_liq = obter_caminho_arquivos("liquidacoes", ano_corrente, codigo_mun_busca)
-                df_liq = carregar_e_filtrar(arq_liq)
-                liq_map = {}
-
-                if not df_liq.empty:
-                    df_liq['codigo_municipio'] = df_liq['codigo_municipio'].astype(str)
-                    df_liq['codigo_orgao'] = df_liq['codigo_orgao'].astype(str)
-                    df_liq['numero_empenho'] = df_liq['numero_empenho'].astype(str)
-                    df_liq['chave_composta'] = df_liq['codigo_municipio'].str.strip() + "_" + df_liq['codigo_orgao'].str.strip() + "_" + df_liq['numero_empenho'].str.strip()
+                if 'exercicio_orcamento' in df_ano.columns:
+                    df_ano['exercicio_ref'] = df_ano['exercicio_orcamento'].astype(str)
+                else:
+                    df_ano['exercicio_ref'] = str(ano_corrente)
                     
-                    if 'valor_bruto_nota_liquidacao' in df_liq.columns:
-                        col_valor_liq = 'valor_bruto_nota_liquidacao'
-                    elif 'valor_liquidado' in df_liq.columns:
-                        col_valor_liq = 'valor_liquidado'
-                    elif 'valor_bruto' in df_liq.columns:
-                        col_valor_liq = 'valor_bruto'
-                    else:
-                        col_valor_liq = None
-                        
-                    if col_valor_liq:
-                        df_liq[col_valor_liq] = pd.to_numeric(df_liq[col_valor_liq], errors='coerce').fillna(0.0)
-                        liq_map = df_liq.groupby('chave_composta')[col_valor_liq].sum().to_dict()
-                   
-                # Pagamentos do ano corrente
-                arq_pg = obter_caminho_arquivos("notas_pagamentos", ano_corrente, codigo_mun_busca)
-                df_pg = carregar_e_filtrar(arq_pg)
-                pag_map = {}
-               
-                if not df_pg.empty:
-                    df_pg['codigo_municipio'] = df_pg['codigo_municipio'].astype(str)
-                    df_pg['codigo_orgao'] = df_pg['codigo_orgao'].astype(str)
-                    df_pg['numero_empenho'] = df_pg['numero_empenho'].astype(str)
-                    df_pg['chave_composta'] = df_pg['codigo_municipio'].str.strip() + "_" + df_pg['codigo_orgao'].str.strip() + "_" + df_pg['numero_empenho'].str.strip()
-                    
-                    df_pg['valor_nota_pagamento'] = pd.to_numeric(df_pg['valor_nota_pagamento'], errors='coerce').fillna(0.0)
-                    pag_map = df_pg.groupby('chave_composta')['valor_nota_pagamento'].sum().to_dict()
-               
+                df_ano['chave_composta'] = (df_ano['codigo_municipio'].str.strip() + "_" + 
+                                            df_ano['exercicio_ref'].str.strip() + "_" + 
+                                            df_ano['codigo_orgao'].str.strip() + "_" + 
+                                            df_ano['numero_empenho'].str.strip())
+                
+                # Mapeia os valores consolidados de TODOS os anos do intervalo
                 df_ano['valor_liquidado'] = df_ano['chave_composta'].map(liq_map).fillna(0.0)
                 df_ano['valor_pago'] = df_ano['chave_composta'].map(pag_map).fillna(0.0)
 
