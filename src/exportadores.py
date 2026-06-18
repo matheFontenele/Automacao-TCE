@@ -194,8 +194,6 @@ def obter_func_segura(func, prefixo, ano, codigo_mun):
         return func(prefixo, ano, codigo_mun)
     except:
         return []
-
-
 def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_caminho_func, carregar_e_filtrar_func):
     """Gera a interface visual dos botões lado a lado no Streamlit."""
     if df_empenhos_filtrados.empty:
@@ -235,7 +233,7 @@ def renderizar_botoes_exportacao(df_empenhos_filtrados, ano, codigo_mun, obter_c
                     subset=['numero_nota_pagamento', 'data_nota_pagamento', 'valor_nota_pagamento']
                 ).set_properties(
                     **{'background-color': '#FCE4D6'}, # VERMELHO
-                    subset=['codigo_municipio', 'codigo_orgao', 'dias_atraso', 'codigo_unidade', 'data_prevista_pagamento', 'numero_empenho', 'codigo_elemento_despesa', 'valor_empenhado', 'nome_negociante', 'valor_empenhado_a_pagar']
+                    subset=['codigo_municipio', 'codigo_orgao', 'codigo_unidade', 'numero_empenho', 'codigo_elemento_despesa', 'valor_empenhado', 'nome_negociante', 'valor_empenhado_a_pagar']
                 ).set_properties(
                     **{'background-color': '#DDEBF7'}, # AZUL
                     subset=['numero_nota_pagamento', 'nu_documento_caixa']
