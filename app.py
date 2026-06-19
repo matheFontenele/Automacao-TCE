@@ -1,34 +1,59 @@
+"""
+Painel de Automação TCE-CE
+Aplicação Streamlit com navegação dinâmica e estrutura modular
+"""
+
+import sys
+import os
 import streamlit as st
-import src.extraction as extraction
-import src.consultation as consultation
-import src.compare as compare
+from src.extraction.extraction import render_extraction_page
+from src.consultation.consutation import render_consultation_page
+from src.compare.compare import render_aba_comparacao
 
-st.set_page_config(page_title="Automação TCE-CE", layout="wide")
+# ============================================================================
+# CONFIGURAÇÃO DO PYTHONPATH
+# ============================================================================
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
-# Estilização para o Menu Superior
-st.markdown("""
+# ============================================================================
+# CONFIGURAÇÃO STREAMLIT
+# ============================================================================
+st.set_page_config(
+    page_title="Automação TCE-CE",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# ============================================================================
+# ESTILIZAÇÃO CSS
+# ============================================================================
+STYLES = """
     <style>
-    /* Seletor universal para botões de navegação e botões do Streamlit */
+    /* Botões padrão */
     div.stButton > button {
         width: 100% !important;
         border-radius: 8px !important;
         height: 3.5em !important;
-        background-color: #1E1E24 !important; /* Grafite Profundo */
+        background-color: #1E1E24 !important;
         color: #FFFFFF !important;
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
         font-weight: 600 !important;
         font-size: 16px !important;
         transition: all 0.3s ease-in-out !important;
     }
-
-    /* Hover: Efeito vermelho suave na borda */
+    
+    /* Hover */
     div.stButton > button:hover {
         background-color: #2D2D35 !important;
         border-color: #ff4b4b !important;
         color: #ff4b4b !important;
+        transform: translateY(-2px) !important;
     }
-
-    /* Botão Primário (Ativo): Fundo Vermelho */
+    
+    /* Botão ativo (primary) */
     div.stButton > button[kind="primary"] {
         background-color: #ff4b4b !important;
         color: white !important;
@@ -36,47 +61,84 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(255, 75, 75, 0.4) !important;
     }
     
-    /* Remove o contorno azul de foco que o Chrome/Streamlit coloca */
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #ff3333 !important;
+        box-shadow: 0 6px 16px rgba(255, 75, 75, 0.6) !important;
+    }
+    
+    /* Foco */
     button:focus:not(:active) {
         border-color: #ff4b4b !important;
         color: #ff4b4b !important;
     }
+    
+    /* Divider */
+    hr {
+        border-color: rgba(255, 255, 255, 0.1) !important;
+    }
     </style>
-""", unsafe_allow_html=True)
+"""
 
-# Inicializa o estado de navegação
+st.markdown(STYLES, unsafe_allow_html=True)
+
+# ============================================================================
+# MAPA DE PÁGINAS (Estrutura escalável)
+# ============================================================================
+PAGES = {
+    'Extração': {
+        'icon': '📊',
+        'func': render_extraction_page,
+        'description': 'Extrair dados de documentos PDF'
+    },
+    'Consulta': {
+        'icon': '🔍',
+        'func': render_consultation_page,
+        'description': 'Consultar e analisar dados extraídos'
+    },
+    'Comparação': {
+        'icon': '⚙️',
+        'func': render_aba_comparacao,
+        'description': 'Comparar múltiplos registros'
+    },
+}
+
+# ============================================================================
+# INICIALIZAR ESTADO DA SESSÃO
+# ============================================================================
 if 'modo_tela' not in st.session_state:
     st.session_state.modo_tela = 'Extração'
 
-# Layout de Menu Superior
+# ============================================================================
+# HEADER E TÍTULO
+# ============================================================================
 st.title("🤖 Painel de Automação TCE-CE")
-col_nav1, col_nav2, col_nav3, col_spacer = st.columns([1.0, 1.0, 1.0, 5])
+st.markdown("**Sistema de Processamento Inteligente de Documentos Fiscais**")
 
-with col_nav1:
-    if st.button("📊 Extração", key="btn_ext", 
-                 type="primary" if st.session_state.modo_tela == 'Extração' else "secondary"):
-        st.session_state.modo_tela = 'Extração'
-        st.rerun()
+# ============================================================================
+# BARRA DE NAVEGAÇÃO DINÂMICA
+# ============================================================================
+cols = st.columns([1, 1, 1, 5])
 
-with col_nav2:
-    if st.button("🔍 Consulta", key="btn_con", 
-                 type="primary" if st.session_state.modo_tela == 'Consulta' else "secondary"):
-        st.session_state.modo_tela = 'Consulta'
-        st.rerun()
-
-with col_nav3:
-    if st.button("⚙️ Comparação", key="btn_cfg", 
-                 type="primary" if st.session_state.modo_tela == 'Comparação' else "secondary"):
-        st.session_state.modo_tela = 'Comparação'
-        st.rerun()
+for idx, (page_name, page_info) in enumerate(PAGES.items()):
+    with cols[idx]:
+        is_active = st.session_state.modo_tela == page_name
         
+        if st.button(
+            f"{page_info['icon']} {page_name}",
+            key=f"btn_{page_name}",
+            type="primary" if is_active else "secondary",
+            use_container_width=True
+        ):
+            st.session_state.modo_tela = page_name
+            st.rerun()
 
 st.divider()
 
-# Exibição do conteúdo
-if st.session_state.modo_tela == 'Extração':
-    extraction.render_extraction_page()
-elif st.session_state.modo_tela == 'Consulta':
-    consultation.render_consultation_page()
-elif st.session_state.modo_tela == 'Comparação':
-    compare.render_aba_comparacao()
+# ============================================================================
+# RENDERIZAR PÁGINA ATIVA
+# ============================================================================
+try:
+    PAGES[st.session_state.modo_tela]['func']()
+except Exception as e:
+    st.error(f"❌ Erro ao carregar a página: {str(e)}")
+    st.info("Contate o administrador se o problema persistir.")

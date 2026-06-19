@@ -6,8 +6,12 @@ import pandas as pd
 import concurrent.futures
 import json
 from tqdm import tqdm
-from src.extraction import processar_lote, gerar_tarefas, executar_pipeline, formatar_log_terminal
 
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
+from src.extraction import processar_lote, gerar_tarefas, executar_pipeline, formatar_log_terminal
 
 # Função principal para execução direta via terminal
 if __name__ == "__main__":
