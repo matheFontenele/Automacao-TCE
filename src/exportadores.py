@@ -3,13 +3,34 @@ import numpy as np
 import pandas as pd
 import io
 
+def normalizar_coluna_chave(df, coluna):
+    """Garante que as chaves de cruzamento estejam limpas e padronizadas."""
+    if df.empty or coluna not in df.columns:
+        return df
+    df[coluna] = (
+        df[coluna].astype(str)
+        .str.strip()
+        .str.replace(r'\.0$', '', regex=True)
+        .str.replace(r'^0+', '', regex=True)
+    )
+    return df
+
+def obter_func_segura(func, prefixo, ano, codigo_mun):
+    """Garante execução amigável da função de glob sem travar o app."""
+    try:
+        return func(prefixo, ano, codigo_mun)
+    except:
+        return []
+
 def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, codigo_mun, obter_caminho_func, carregar_e_filtrar_func):
+    """
+    Gera o DataFrame detalhado combinando empenhos, liquidações/notas fiscais e pagamentos.
+    Apenas cruza dados reais existentes no TCE, sem criar linhas fictícias.
+    """
     if df_empenhos_filtrados is None or df_empenhos_filtrados.empty:
         return pd.DataFrame()
 
     def to_numeric_br(series):
-        if series is None:
-            return pd.Series([0.0])
         if pd.api.types.is_numeric_dtype(series):
             return pd.to_numeric(series, errors='coerce').fillna(0.0)
         s = series.astype(str)
@@ -22,7 +43,6 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
     def processar_df_ano(df, ano_fallback):
         if df is None or df.empty:
             return None
-        
         for c in chaves_base:
             if c in df.columns:
                 df[c] = df[c].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.replace(r'^0+', '', regex=True)
@@ -35,9 +55,9 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
             df['exercicio_ref'] = str(ano_fallback)
         else:
             df['exercicio_ref'] = ""
-            
         return df
 
+    # 1. Carregar bases correlatas em loop
     dfs_nf_acumulados = []
     dfs_pag_acumulados = []
 
@@ -48,11 +68,8 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
             
         arq_pag = obter_func_segura(obter_caminho_func, "notas_pagamentos", ano_corrente, codigo_mun)
 
-        df_nf_ano = carregar_e_filtrar_func(arq_fiscais)
-        df_pag_ano = carregar_e_filtrar_func(arq_pag)
-
-        df_nf_ano = processar_df_ano(df_nf_ano, ano_corrente)
-        df_pag_ano = processar_df_ano(df_pag_ano, ano_corrente)
+        df_nf_ano = processar_df_ano(carregar_e_filtrar_func(arq_fiscais), ano_corrente)
+        df_pag_ano = processar_df_ano(carregar_e_filtrar_func(arq_pag), ano_corrente)
 
         if df_nf_ano is not None and not df_nf_ano.empty:
             dfs_nf_acumulados.append(df_nf_ano)
@@ -65,74 +82,30 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
     df_empenhos_filtrados = processar_df_ano(df_empenhos_filtrados, None)
     chaves = ['exercicio_ref'] + chaves_base
 
+    # 2. Criar sequenciadores
     if not df_nf.empty:
         cols_sort_nf = [c for c in ['data_liquidacao', 'numero_nota_fiscal'] if c in df_nf.columns]
-        if cols_sort_nf:
+        if cols_sort_nf: 
             df_nf = df_nf.sort_values(by=chaves + cols_sort_nf)
         df_nf['seq_mov'] = df_nf.groupby(chaves).cumcount()
     else:
-        df_nf = pd.DataFrame(columns=list(chaves) + ['seq_mov'])
+        df_nf = pd.DataFrame(columns=chaves + ['seq_mov'])
 
     if not df_pag.empty:
         cols_sort_pag = [c for c in ['data_nota_pagamento', 'numero_nota_pagamento'] if c in df_pag.columns]
-        if cols_sort_pag:
+        if cols_sort_pag: 
             df_pag = df_pag.sort_values(by=chaves + cols_sort_pag)
         df_pag['seq_mov'] = df_pag.groupby(chaves).cumcount()
     else:
-        df_pag = pd.DataFrame(columns=list(chaves) + ['seq_mov'])
+        df_pag = pd.DataFrame(columns=chaves + ['seq_mov'])
 
+    # 3. Unir movimentos (apenas dados reais do TCE)
     df_movimentos = pd.merge(df_nf, df_pag, on=chaves + ['seq_mov'], how='outer', suffixes=('_nf', '_pag'))
 
-    # CORREÇÃO CRÍTICA: Garantir que valor_nota_pagamento_num exista
-    if df_movimentos.empty:
-        df_movimentos = pd.DataFrame(columns=list(chaves) + ['seq_mov', 'valor_nota_pagamento_num'])
-        df_movimentos['valor_nota_pagamento_num'] = 0.0
-    else:
-        if 'valor_nota_pagamento' in df_movimentos.columns:
-            df_movimentos['valor_nota_pagamento_num'] = to_numeric_br(df_movimentos['valor_nota_pagamento'])
-        else:
-            df_movimentos['valor_nota_pagamento_num'] = 0.0
-            
-    total_pago_mov = df_movimentos.groupby(chaves)['valor_nota_pagamento_num'].sum().reset_index()
-    total_pago_mov.rename(columns={'valor_nota_pagamento_num': 'total_pago'}, inplace=True)
-    
-    df_emp_num = df_empenhos_filtrados.copy()
-    df_emp_num['valor_empenhado_num'] = to_numeric_br(df_emp_num['valor_empenhado'])
-    
-    df_check_saldo = pd.merge(df_emp_num, total_pago_mov, on=chaves, how='left')
-    df_check_saldo['total_pago'] = df_check_saldo['total_pago'].fillna(0.0)
-    df_check_saldo['saldo_a_pagar'] = df_check_saldo['valor_empenhado_num'] - df_check_saldo['total_pago']
-    
-    df_pendentes = df_check_saldo[df_check_saldo['saldo_a_pagar'] > 0.01].copy()
-    
-    if not df_pendentes.empty:
-        df_mov_pend = pd.DataFrame()
-        for c in chaves:
-            df_mov_pend[c] = df_pendentes[c].values
-            
-        df_mov_pend['valor_nota_pagamento'] = df_pendentes['saldo_a_pagar'].values
-        df_mov_pend['seq_mov'] = -1
-        
-        if 'data_emissao_empenho' in df_pendentes.columns:
-            df_mov_pend['data_emissao_empenho'] = df_pendentes['data_emissao_empenho'].values
-            
-        if not df_nf.empty and 'data_liquidacao' in df_nf.columns:
-            df_nf_dt = df_nf.copy()
-            df_nf_dt['data_liquidacao_dt'] = pd.to_datetime(df_nf_dt['data_liquidacao'], errors='coerce')
-            ult_liq = df_nf_dt.sort_values('data_liquidacao_dt').groupby(chaves)['data_liquidacao'].last().reset_index()
-            df_mov_pend = pd.merge(df_mov_pend, ult_liq, on=chaves, how='left')
-            
-            if 'data_emissao_empenho' in df_mov_pend.columns and 'data_liquidacao' in df_mov_pend.columns:
-                df_mov_pend['data_liquidacao'] = df_mov_pend['data_liquidacao'].fillna(df_mov_pend['data_emissao_empenho'])
-        else:
-            if 'data_emissao_empenho' in df_mov_pend.columns:
-                df_mov_pend['data_liquidacao'] = df_mov_pend.get('data_emissao_empenho', '')
-                
-        df_movimentos = pd.concat([df_movimentos, df_mov_pend], ignore_index=True)
-
+    # 4. Cruzar com os cabeçalhos dos Empenhos
     df_consolidado = pd.merge(df_empenhos_filtrados, df_movimentos, on=chaves, how='left')
 
-    # CORREÇÃO: Tratar datas com fillna explícito
+    # 5. CÁLCULO DE PRAZOS E ATRASOS
     if 'data_liquidacao' in df_consolidado.columns:
         dt_liqui = pd.to_datetime(df_consolidado['data_liquidacao'], errors='coerce')
     else:
@@ -143,26 +116,25 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
     else:
         dt_emissao = pd.Series([pd.NaT] * len(df_consolidado))
         
+    # Data base: Prioriza liquidação, se não houver, usa a emissão do empenho
+    dt_base = dt_liqui.fillna(dt_emissao)
+    
     if 'data_nota_pagamento' in df_consolidado.columns:
         dt_pag = pd.to_datetime(df_consolidado['data_nota_pagamento'], errors='coerce')
     else:
         dt_pag = pd.Series([pd.NaT] * len(df_consolidado))
     
-    dt_base = dt_liqui.where(dt_liqui.notna(), dt_emissao)
-    
-    data_prevista = dt_base + pd.Timedelta(days=30)
-    df_consolidado['data_prevista_pagamento'] = data_prevista.dt.strftime('%Y-%m-%d')
+    df_consolidado['data_prevista_pagamento'] = (dt_base + pd.Timedelta(days=30)).dt.strftime('%Y-%m-%d')
     df_consolidado['data_prevista_pagamento'] = df_consolidado['data_prevista_pagamento'].fillna('')
 
+    # Status: PAGO se tem data de pagamento, PENDENTE se tem liquidação, EMPENHADO se só tem empenho
     df_consolidado['status_execucao'] = np.where(
         dt_pag.notna(), 
         'PAGO', 
         np.where(dt_base.notna(), 'PENDENTE', 'EMPENHADO')
     )
-    
-    if 'seq_mov' in df_consolidado.columns:
-        df_consolidado.loc[df_consolidado['seq_mov'] == -1, 'status_execucao'] = 'SALDO PENDENTE'
 
+    # Cálculo de dias de atraso
     hoje = pd.Timestamp.now().normalize()
     prazo_limite = dt_base + pd.Timedelta(days=30)
 
@@ -174,10 +146,9 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
         atraso_se_pago,
         np.where(dt_base.notna(), atraso_se_pendente, 0)
     )
-    df_consolidado['dias_atraso'] = df_consolidado['dias_atraso'].clip(lower=0)
-    df_consolidado['dias_atraso'] = df_consolidado['dias_atraso'].fillna(0)
-    df_consolidado['dias_atraso'] = df_consolidado['dias_atraso'].astype(int)
+    df_consolidado['dias_atraso'] = df_consolidado['dias_atraso'].clip(lower=0).fillna(0).astype(int)
 
+    # 6. MAPEAMENTO DE SINÔNIMOS
     if 'codigo_unidade_orcamentaria' in df_consolidado.columns:
         df_consolidado['codigo_unidade'] = df_consolidado['codigo_unidade_orcamentaria']
     if 'modalidade_nota_empenho' in df_consolidado.columns:
@@ -202,6 +173,7 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
     if 'numero_documento_caixa' in df_consolidado.columns:
         df_consolidado['nu_documento_caixa'] = df_consolidado['numero_documento_caixa']
 
+    # 7. Estrutura rígida de saída
     colunas_solicitadas = [
         'codigo_municipio', 'exercicio_orcamento', 'codigo_orgao', 'codigo_unidade',
         'numero_empenho', 'data_emissao_empenho', 'data_referencia_empenho', 'modalidade_empenho', 
@@ -227,12 +199,6 @@ def gerar_dataframe_detalhado(df_empenhos_filtrados, ano_inicial, ano_final, cod
     return df_consolidado[colunas_solicitadas]
 
 
-def obter_func_segura(func, prefixo, ano, codigo_mun):
-    try:
-        return func(prefixo, ano, codigo_mun)
-    except:
-        return []
-
 def renderizar_botoes_exportacao(
     df_empenhos_filtrados,
     ano_inicial,
@@ -241,6 +207,7 @@ def renderizar_botoes_exportacao(
     obter_caminho_func,
     carregar_e_filtrar_func
 ):
+    """Gera a interface visual dos botões lado a lado no Streamlit."""
     if df_empenhos_filtrados.empty:
         return
 
@@ -270,21 +237,19 @@ def renderizar_botoes_exportacao(
                     df_empenhos_filtrados, ano_inicial, ano_final, codigo_mun, 
                     obter_caminho_func, carregar_e_filtrar_func
                 )
-                
-                # CORREÇÃO FINAL: fillna com valor explícito
-                df_detalhado = df_detalhado.fillna(value='')
+                df_detalhado = df_detalhado.fillna('')
 
                 df_colorido = df_detalhado.style.set_properties(
-                    **{'background-color': '#FFF2CC'},
+                    **{'background-color': '#FFF2CC'}, 
                     subset=['numero_nota_pagamento', 'data_nota_pagamento', 'valor_nota_pagamento']
                 ).set_properties(
-                    **{'background-color': '#FCE4D6'},
+                    **{'background-color': '#FCE4D6'}, 
                     subset=['codigo_municipio', 'codigo_orgao', 'codigo_unidade', 'numero_empenho', 'codigo_elemento_despesa', 'valor_empenhado', 'nome_negociante', 'valor_empenhado_a_pagar']
                 ).set_properties(
-                    **{'background-color': '#DDEBF7'},
+                    **{'background-color': '#DDEBF7'}, 
                     subset=['numero_nota_pagamento', 'nu_documento_caixa']
                 ).set_properties(
-                    **{'background-color': '#E2EFDA'},
+                    **{'background-color': '#E2EFDA'}, 
                     subset=['data_liquidacao', 'valor_liquidado']
                 )
                 
