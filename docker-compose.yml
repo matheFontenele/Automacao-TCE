@@ -3,11 +3,13 @@ services:
     build: .
     environment:
       - PYTHONDONTWRITEBYTECODE=1 # Evita sujeira de cache .pyc na sua pasta local
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=none # Desliga completamente o monitoramento de arquivos, liberando a CPU.
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false # Desativa a coleta de métricas do Streamlit, deixando a inicialização mais leve.
     volumes:
       - .:/app # Mapeia todo o seu código atual para dentro do container
       - /app/__pycache__ # Cria um volume anônimo para o cache do container não conflitar com o local
     ports:
-      - "8501:8501"
+      - "8503:8501"
 
   extrator:
     build: .
