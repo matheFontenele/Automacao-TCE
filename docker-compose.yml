@@ -9,7 +9,7 @@ services:
       - .:/app # Mapeia todo o seu código atual para dentro do container
       - /app/__pycache__ # Cria um volume anônimo para o cache do container não conflitar com o local
     ports:
-      - "8503:8501"
+      - "8501:8501"
 
   extrator:
     build: .

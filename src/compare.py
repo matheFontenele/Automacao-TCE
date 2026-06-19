@@ -51,7 +51,6 @@ def ler_txt_upload(arquivo_upload, delimitador=',', encoding='utf-8', tem_cabeca
     for enc in [encoding, 'latin-1', 'cp1252', 'utf-8']:
         try:
             if tem_cabecalho:
-                # Lê com cabeçalho na primeira linha
                 df = pd.read_csv(
                     io.BytesIO(bytes_data),
                     sep=delimitador,
@@ -60,7 +59,6 @@ def ler_txt_upload(arquivo_upload, delimitador=',', encoding='utf-8', tem_cabeca
                     on_bad_lines='skip'
                 )
             else:
-                # Lê sem cabeçalho - gera nomes automáticos
                 df = pd.read_csv(
                     io.BytesIO(bytes_data),
                     sep=delimitador,
@@ -69,7 +67,6 @@ def ler_txt_upload(arquivo_upload, delimitador=',', encoding='utf-8', tem_cabeca
                     on_bad_lines='skip',
                     header=None
                 )
-                # Gera nomes de colunas genéricos
                 df.columns = [f'col_{i+1}' for i in df.columns]
             
             return df
@@ -77,6 +74,40 @@ def ler_txt_upload(arquivo_upload, delimitador=',', encoding='utf-8', tem_cabeca
             continue
         except Exception:
             continue
+    
+    return None
+
+
+def ler_arquivo_txt_local(caminho_arquivo, delimitador=',', encoding='utf-8', tem_cabecalho=True):
+    """
+    Lê um arquivo TXT/CSV local (já salvo na pasta data_internal).
+    """
+    try:
+        for enc in [encoding, 'latin-1', 'cp1252', 'utf-8']:
+            try:
+                if tem_cabecalho:
+                    return pd.read_csv(
+                        caminho_arquivo,
+                        sep=delimitador,
+                        encoding=enc,
+                        dtype=str,
+                        on_bad_lines='skip'
+                    )
+                else:
+                    df = pd.read_csv(
+                        caminho_arquivo,
+                        sep=delimitador,
+                        encoding=enc,
+                        dtype=str,
+                        on_bad_lines='skip',
+                        header=None
+                    )
+                    df.columns = [f'col_{i+1}' for i in df.columns]
+                    return df
+            except UnicodeDecodeError:
+                continue
+    except Exception as e:
+        st.error(f"❌ Erro ao ler arquivo local: {e}")
     
     return None
 
@@ -152,7 +183,6 @@ def render_bloco_patrimonial():
     st.markdown("#### 🏛️ Comparação Patrimonial")
     st.caption("Cruza o TOMBO da base interna com o `numero_registro` do TCE-CE.")
     
-    PASTA_INTERNAL, PASTA_TCE = 'data_internal', 'data'
     os.makedirs(PASTA_INTERNAL, exist_ok=True)
 
     st.markdown("**📥 1. Dados Internos (JSON)**")
@@ -208,14 +238,12 @@ def render_bloco_patrimonial():
 
 def processar_cruzamento_txt_parquet(df_txt, df_parquet, coluna_txt, coluna_parquet, normalizar=True):
     """Versão otimizada sem cópias desnecessárias."""
-    # Renomeia colunas SEM copiar o DataFrame
     df_a = df_txt.rename(columns={c: f'TXT_{c}' for c in df_txt.columns})
     df_b = df_parquet.rename(columns={c: f'TCE_{c}' for c in df_parquet.columns})
     
     chave_txt = f'TXT_{coluna_txt}'
     chave_parquet = f'TCE_{coluna_parquet}'
     
-    # Aplica normalização apenas nas colunas de chave (não no DF todo)
     if normalizar:
         df_a['__chave__'] = padronizar_chave(df_a[chave_txt])
         df_b['__chave__'] = padronizar_chave(df_b[chave_parquet])
@@ -223,14 +251,12 @@ def processar_cruzamento_txt_parquet(df_txt, df_parquet, coluna_txt, coluna_parq
         df_a['__chave__'] = df_a[chave_txt].astype(str).str.strip()
         df_b['__chave__'] = df_b[chave_parquet].astype(str).str.strip()
     
-    # Inner join
     df_mesclado = pd.merge(
         df_a, df_b,
         on='__chave__',
         how='inner'
     )
     
-    # Remove coluna auxiliar
     if '__chave__' in df_mesclado.columns:
         df_mesclado = df_mesclado.drop(columns=['__chave__'])
     
@@ -248,42 +274,45 @@ def render_bloco_txt_parquet():
         "Será gerada uma lista **apenas com os registros que casam**, mesclando as informações de ambos."
     )
     
+    os.makedirs(PASTA_INTERNAL, exist_ok=True)
+    
+    # Diagnóstico dos parquets disponíveis
     if os.path.exists(PASTA_TCE):
         todos_arquivos = os.listdir(PASTA_TCE)
         parquets = [f for f in todos_arquivos if f.endswith('.parquet')]
         
+        if not parquets:
+            st.error(f"❌ **Nenhum arquivo .parquet encontrado em `{PASTA_TCE}`**")
+            return
+        
         st.success(f"✅ Pasta existe! Encontrados **{len(parquets)}** arquivos parquet")
         
-        # Filtra especificamente por bens_incorporados
         prefixo = "bens_incorporados_patrimonio_municipio"
         bens_parquets = sorted([f for f in parquets if prefixo in f.lower()])
-        
-        if bens_parquets:
-            st.info(f"📊 **{len(bens_parquets)}** arquivos de bens incorporados disponíveis")
-            
-            # Mostra os primeiros
-            with st.expander("📋 Ver todos os arquivos de bens", expanded=False):
-                for i, p in enumerate(bens_parquets, 1):
-                    st.caption(f"{i}. {p}")
-        else:
-            st.warning(f"⚠️ Nenhum arquivo com '{prefixo}' encontrado")
-            st.caption("📋 Arquivos disponíveis:")
-            for p in sorted(parquets)[:5]:
-                st.caption(f"• {p}")
+
     else:
-        st.error(f"❌ Pasta não existe!")
+        st.error(f"❌ Pasta `{PASTA_TCE}` não existe!")
         return
     
     st.divider()
     
     # ========================================
-    # 1. UPLOAD DO ARQUIVO TXT
-    # ========================================
-        # ========================================
-    # 1. UPLOAD DO ARQUIVO TXT
+    # 1. SEU ARQUIVO (TXT/CSV) - MESMA LÓGICA DO BLOCO 1
     # ========================================
     st.markdown("**📥 1. Seu Arquivo (TXT/CSV)**")
     
+    caminho_txt_salvo = None
+    extensoes_validas = ('.txt', '.csv', '.pat', '.dat', '.log')
+    arquivos_txt = sorted([f for f in os.listdir(PASTA_INTERNAL) if f.lower().endswith(extensoes_validas)])
+    
+    metodo_origem_txt = st.radio(
+        "Como deseja importar os dados?",
+        options=["Selecionar arquivo existente", "Fazer novo upload"],
+        horizontal=True,
+        key="metodo_origem_txt"
+    )
+    
+    # Configurações de leitura (delimitador e encoding)
     col_delim, col_enc = st.columns(2)
     with col_delim:
         opcoes_delim = {
@@ -306,21 +335,39 @@ def render_bloco_txt_parquet():
             key="enc_txt"
         )
     
-    # Nova opção: tem cabeçalho?
     tem_cabecalho = True
     
-    upload_txt = st.file_uploader(
-        "Upload do arquivo TXT/CSV:",
-        type=['txt', 'csv', 'pat', 'dat', 'log'],
-        key="upload_txt"
-    )
+    if metodo_origem_txt == "Selecionar arquivo existente":
+        if arquivos_txt:
+            sel_txt = st.selectbox(
+                "Selecione o arquivo TXT/CSV:",
+                arquivos_txt,
+                key="sel_txt_existente"
+            )
+            caminho_txt_salvo = os.path.join(PASTA_INTERNAL, sel_txt)
+        else:
+            st.warning(f"Nenhum arquivo TXT/CSV encontrado na pasta {PASTA_INTERNAL}.")
+    else:
+        arquivo_upload = st.file_uploader(
+            "Upload do arquivo TXT/CSV:",
+            type=['txt', 'csv', 'pat', 'dat', 'log'],
+            key="upload_txt"
+        )
+        if arquivo_upload:
+            caminho_txt_salvo = os.path.join(PASTA_INTERNAL, arquivo_upload.name)
+            with open(caminho_txt_salvo, "wb") as f:
+                f.write(arquivo_upload.getbuffer())
+            st.success(f"✅ Arquivo {arquivo_upload.name} salvo com sucesso!")
+            st.rerun()
     
+    # Carrega o DataFrame do TXT (de arquivo existente ou recém-salvo)
     df_txt = None
-    if upload_txt is not None:
-        df_txt = ler_txt_upload(upload_txt, delimitador, encoding, tem_cabecalho)
+    if caminho_txt_salvo and os.path.exists(caminho_txt_salvo):
+        df_txt = ler_arquivo_txt_local(caminho_txt_salvo, delimitador, encoding, tem_cabecalho)
         
         if df_txt is None or df_txt.empty:
-            st.error("❌ Não foi possível ler o arquivo.")
+            st.error("❌ Não foi possível ler o arquivo. Verifique delimitador e encoding.")
+            df_txt = None
         else:
             st.success(f"✅ Carregado: **{len(df_txt):,}** linhas × **{len(df_txt.columns)}** colunas")
             with st.expander("👁️ Pré-visualizar arquivo TXT", expanded=False):
@@ -328,7 +375,7 @@ def render_bloco_txt_parquet():
                 st.caption("**Colunas detectadas:** " + ", ".join(df_txt.columns.tolist()))
     
     # ========================================
-    # 2. SELEÇÃO DOS PARQUETS
+    # 2. SELEÇÃO DOS PARQUETS DO TCE
     # ========================================
     st.markdown("**📄 2. Bases do TCE-CE**")
     
@@ -336,7 +383,6 @@ def render_bloco_txt_parquet():
         selecionados = st.multiselect(
             "Selecione os arquivos parquet:",
             options=bens_parquets,
-            default=bens_parquets,  # Seleciona todos por padrão
             key="multiselect_txt"
         )
     else:
@@ -361,12 +407,9 @@ def render_bloco_txt_parquet():
                 key="col_txt"
             )
         with col_b:
-            # Lê o primeiro parquet para pegar colunas
             try:
                 df_preview = pd.read_parquet(os.path.join(PASTA_TCE, selecionados[0]))
                 colunas_parquet = df_preview.columns.tolist()
-                
-                # Sugere numero_registro se existir
                 index_default = colunas_parquet.index('numero_registro') if 'numero_registro' in colunas_parquet else 0
             except Exception as e:
                 st.error(f"Erro ao ler parquet: {e}")
@@ -383,7 +426,6 @@ def render_bloco_txt_parquet():
         if st.button("🚀 Processar Cruzamento", type="primary", key="btn_processar_txt"):
             with st.spinner("Processando..."):
                 try:
-                    # Carrega todos os parquets selecionados
                     dfs_parquet = []
                     for arq in selecionados:
                         caminho = os.path.join(PASTA_TCE, arq)
@@ -393,16 +435,12 @@ def render_bloco_txt_parquet():
                     
                     st.info(f"📊 **{len(df_parquet_completo):,}** registros dos parquets")
                     
-                    # Processa o cruzamento
                     df_mesclado = processar_cruzamento_txt_parquet(
                         df_txt, df_parquet_completo,
                         coluna_txt, coluna_parquet,
                         normalizar=True
                     )
                     
-                    # ========================================
-                    # RESULTADOS
-                    # ========================================
                     st.divider()
                     st.markdown("### 🎯 Resultado")
                     
@@ -416,8 +454,7 @@ def render_bloco_txt_parquet():
                     else:
                         st.success(f"✅ **{len(df_mesclado):,}** registros mesclados!")
                         
-                        max_preview = st.slider("Linhas para pré-visualizar:", 100, 2000, 200, step=100)
-                        st.dataframe(df_mesclado.head(max_preview), use_container_width=True, hide_index=True)
+                        st.dataframe(df_mesclado.head(50), use_container_width=True, hide_index=True)
                         
                         st.download_button(
                             label=f"📥 Baixar Excel ({len(df_mesclado):,} linhas)",
@@ -432,7 +469,7 @@ def render_bloco_txt_parquet():
                     import traceback
                     st.code(traceback.format_exc())
     else:
-        st.info("👈 Upload do TXT e selecione parquets para iniciar.")
+        st.info("👈 Selecione um arquivo TXT e os parquets para iniciar.")
 
 
 # ==========================================
@@ -440,10 +477,9 @@ def render_bloco_txt_parquet():
 # ==========================================
 
 def render_aba_comparacao():
-    """Página principal que permite alternar entre os três blocos lógicos."""
+    """Página principal que permite alternar entre os blocos lógicos."""
     st.header("⚖️ Central de Comparação e Validação de Dados")
     
-    # Seletor principal de modo (agora com 3 opções)
     modo_selecionado = st.radio(
         "Escolha o tipo de comparação que deseja realizar:",
         options=[
@@ -456,7 +492,6 @@ def render_aba_comparacao():
     
     st.divider()
     
-    # Roteamento para o bloco correspondente
     if modo_selecionado == "🏛️ Comparação Patrimonial":
         render_bloco_patrimonial()
     elif modo_selecionado == "🔗 Cruzamento TXT × Parquet":
