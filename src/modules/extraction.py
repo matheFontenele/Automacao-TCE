@@ -9,12 +9,15 @@ import threading
 import concurrent.futures
 import json
 import datetime
+from pathlib import Path
 from tqdm import tqdm
 
 
 # ==============================================================
 # CONFIGURAÇÕES EXTRAS
 # ==============================================================
+
+PASTA_DADOS = "/app/data"
 
 # Mapeamento para garantir que o nome da aba encontre o arquivo correto no disco
 DATA_MAP = {
@@ -34,11 +37,30 @@ DATA_MAP = {
 
 # Carrega a lista de municípios do arquivo JSON para uso na geração das tarefas de extração
 def carregar_municipios():
+    """
+    Carrega municípios do JSON da raiz do projeto
+    """
     try:
-        with open('municipios.json', 'r', encoding='utf-8') as f:
+        caminho_json = Path(__file__).resolve().parents[2] / 'municipios.json'
+        
+        if not caminho_json.exists():
+            caminho_json = Path('/app/municipios.json')
+        
+        print(f"📂 Carregando JSON de: {caminho_json}")
+        
+        if not caminho_json.exists():
+            print(f"🚨 ERRO: {caminho_json} não encontrado")
+            print(f"📍 Diretório atual: {os.getcwd()}")
+            return []
+        
+        with open(caminho_json, 'r', encoding='utf-8') as f:
             data = json.load(f)
+        
+        print(f"✅ {len(data['elements'])} municípios carregados!")
         return data['elements']
-    except FileNotFoundError:
+        
+    except Exception as e:
+        print(f"🚨 ERRO: {type(e).__name__}: {e}")
         return []
 
 

@@ -1,20 +1,27 @@
 services:
   app:
     build: .
+    container_name: tce_app
     environment:
-      - PYTHONDONTWRITEBYTECODE=1 # Evita sujeira de cache .pyc na sua pasta local
-      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=none # Desliga completamente o monitoramento de arquivos, liberando a CPU.
-      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false # Desativa a coleta de métricas do Streamlit, deixando a inicialização mais leve.
+      - PYTHONDONTWRITEBYTECODE=1
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=none
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
     volumes:
-      - .:/app # Mapeia todo o seu código atual para dentro do container
-      - /app/__pycache__ # Cria um volume anônimo para o cache do container não conflitar com o local
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./data_internal:/app/data_internal
+      - /app/__pycache__
     ports:
       - "8501:8501"
+    command: streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0
 
   extrator:
     build: .
+    container_name: tce_extrator
     volumes:
-      - .:/app # Permite que alterações no extrator reflitam sem rebuild também
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./data_internal:/app/data_internal
       - /app/__pycache__
-    command: python main.py 2024 2026
+    command: python src/main.py 2024 2026
     restart: "no"

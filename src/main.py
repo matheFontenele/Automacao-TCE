@@ -6,7 +6,7 @@ import pandas as pd
 import concurrent.futures
 import json
 from tqdm import tqdm
-from src.extraction import processar_lote, gerar_tarefas, executar_pipeline, formatar_log_terminal
+from modules.extraction import processar_lote, gerar_tarefas, executar_pipeline, formatar_log_terminal
 
 
 # Função principal para execução direta via terminal

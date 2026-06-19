@@ -1,7 +1,11 @@
 import streamlit as st
-import src.extraction as extraction
-import src.consultation as consultation
-import src.compare as compare
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from src.modules.extraction import render_extraction_page
+from src.modules.consultation import render_consultation_page
+from src.modules.compare import render_aba_comparacao
 
 st.set_page_config(page_title="Automação TCE-CE", layout="wide")
 
@@ -75,8 +79,8 @@ st.divider()
 
 # Exibição do conteúdo
 if st.session_state.modo_tela == 'Extração':
-    extraction.render_extraction_page()
+    render_extraction_page()
 elif st.session_state.modo_tela == 'Consulta':
-    consultation.render_consultation_page()
+    render_consultation_page()
 elif st.session_state.modo_tela == 'Comparação':
-    compare.render_aba_comparacao()
+    render_aba_comparacao()

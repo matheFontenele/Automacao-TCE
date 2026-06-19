@@ -15,11 +15,12 @@ COPY requirements.txt .
 # Instala as dependências
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia todo o resto do projeto para dentro do contêiner
-COPY . .
+# ✅ COPIA APENAS O CÓDIGO FONTE (não copia data/ nem data_internal/)
+COPY src/ ./src/
+COPY municipios.json .
 
 # Expõe a porta do Streamlit
 EXPOSE 8501
 
-# Comando atualizado para desenvolvimento: monitoramento ativo via Polling
-CMD ["streamlit", "run", "app.py", "--server.runOnSave", "true", "--server.fileWatcherType", "poll"]
+# ✅ COMANDO AJUSTADO para nova estrutura (src/app.py)
+CMD ["streamlit", "run", "src/app.py", "--server.port=8501", "--server.address=0.0.0.0"]

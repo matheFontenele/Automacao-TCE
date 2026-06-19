@@ -6,7 +6,7 @@ import requests
 from datetime import datetime
 
 # IMPORTANDO O GERADOR DE PDF ISOLADO
-from src.gerador_pdf import gerar_pdf_empenho
+from modules.gerador_pdf import gerar_pdf_empenho
 
 # ==============================================================================
 # FUNÇÕES AUXILIARES DO MODAL
