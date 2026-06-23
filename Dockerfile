@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ✅ COPIA APENAS O CÓDIGO FONTE (não copia data/ nem data_internal/)
 COPY src/ ./src/
 COPY municipios.json .
+COPY endpoints.json .
 
 # Expõe a porta do Streamlit
 EXPOSE 8501

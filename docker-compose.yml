@@ -4,12 +4,15 @@ services:
     container_name: tce_app
     environment:
       - PYTHONDONTWRITEBYTECODE=1
-      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=none
+      # - STREAMLIT_SERVER_FILE_WATCHER_TYPE=none <-- DESATIVADO PARA DEV
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll # <-- Permite o Streamlit atualizar sozinho!
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
     volumes:
       - ./src:/app/src
       - ./data:/app/data
       - ./data_internal:/app/data_internal
+      - ./endpoints.json:/app/endpoints.json     # 🕳️ Buraco de minhoca do Endpoints
+      - ./municipios.json:/app/municipios.json   # 🕳️ Buraco de minhoca dos Municípios
       - /app/__pycache__
     ports:
       - "8501:8501"
@@ -22,6 +25,8 @@ services:
       - ./src:/app/src
       - ./data:/app/data
       - ./data_internal:/app/data_internal
+      - ./endpoints.json:/app/endpoints.json     # 🕳️ Extrator também enxerga o JSON real
+      - ./municipios.json:/app/municipios.json
       - /app/__pycache__
     command: python src/main.py 2024 2026
     restart: "no"
