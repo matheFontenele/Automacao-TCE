@@ -340,11 +340,15 @@ def render_consultation_page():
                 mime="text/csv", use_container_width=True
             )
             
-            renderizar_botoes_exportacao(
-                df_empenhos_filtrados=df, ano_inicial=filtros['ano_inicial'], ano_final=filtros['ano_final'], 
-                codigo_mun=filtros['codigo_mun_busca'], categoria_atual=filtros['categoria_sel'],
-                obter_caminho_func=obter_caminho_arquivos_modal, carregar_e_filtrar_func=carregar_e_filtrar_modal 
-            )
+            if filtros['categoria_sel'] == "Notas de Empenho":
+                renderizar_botoes_exportacao(
+                    df_empenhos_filtrados=df,
+                    ano_inicial=filtros['ano_inicial'],
+                    ano_final=filtros['ano_final'],
+                    codigo_mun=filtros['codigo_mun_busca'],
+                    obter_caminho_func=obter_caminho_arquivos_modal,
+                    carregar_e_filtrar_func=carregar_e_filtrar_modal 
+                )
         else:
             st.warning("Nenhum registro encontrado para os filtros aplicados.")
     else:
