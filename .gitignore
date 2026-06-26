@@ -19,6 +19,7 @@ data_internal/
 *.json
 # O "!" inverte a regra: mantém o município.json que é essencial para o script
 !municipios.json
+!endpoints.json
 
 # --- Arquivos de Sistema e IDE ---
 .vscode/
