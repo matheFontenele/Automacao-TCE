@@ -1,7 +1,44 @@
-venv
-data/
-__pycache__
+# ==========================================
+# 1. CONTROLE DE VERSÃO
+# ==========================================
 .git
+.gitignore
+
+# ==========================================
+# 2. AMBIENTES VIRTUAIS E CACHE PYTHON
+# ==========================================
+venv/
+.venv/
+env/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ==========================================
+# 3. DADOS PESADOS (Mapeados via Volume)
+# ==========================================
+data/
+data_internal/
+*.parquet
+*.csv
+
+# ==========================================
+# 4. ARQUIVOS DE SISTEMA OPERACIONAL E EDITOR
+# ==========================================
 .DS_Store
-# Não ignorar a pasta data se ela já existir, 
-# mas geralmente mapeamos via volume
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.tmp
+
+# ==========================================
+# 5. ARQUIVOS DE INFRAESTRUTURA E SCRIPTS LOCais
+# ==========================================
+Dockerfile*
+docker-compose*.yml
+run.bat
+teste.py
+README.md

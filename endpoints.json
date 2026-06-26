@@ -3,6 +3,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/notas_empenhos",
         "prefixo": "notas_empenho",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [
             {"id": "status_pagamento", "label": "Filtro de Pagamento", "tipo": "select", "opcoes": ["TODOS", "PENDENTE", "PARCIAL", "PAGO"]}
         ],
@@ -30,6 +31,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/notas_fiscais",
         "prefixo": "notas_fiscais",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "numero_chave_acesso_nfe": "Chave de Acesso NF",
@@ -52,6 +54,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/notas_pagamentos",
         "prefixo": "notas_pagamentos",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "numero_documento_caixa": "Nº Doc Caixa",
@@ -76,6 +79,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/pagamentos_liquidacoes",
         "prefixo": "pagamento_e_liquidacoes",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "numero_nota_pagamento": "Nº Nota Pagto",
@@ -98,6 +102,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/liquidacoes",
         "prefixo": "liquidacoes",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "descricao_historico_nota_liquidacao": "Histórico de Liquidação",
@@ -122,6 +127,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/controle_bens_unidades_orcamentarias",
         "prefixo": "controle_besn_unidades_orcamentarias",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "especificacao_bem": "Especificação do Bem",
@@ -143,6 +149,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/ajuste_reavaliacao_patrimonial_desincorporacao_bem_municipio",
         "prefixo": "ajuste_reavaliacao_patrimonial_desincorporacao_bem_municipio",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "especificacao_bem": "Especificação do Bem",
@@ -167,6 +174,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/controle_bens_notas_empenhos",
         "prefixo": "controle_besn_notas_empenho",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "numero_empenho": "Nº Empenho",
@@ -188,6 +196,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/contas_redutoras_bens_incorporados_patrimonio_municipio",
         "prefixo": "contas_redutoras_bens_incorporados_patrimonio_municipio",
         "frequencia": "mensal",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio", "data_referencia_doc"],
         "campos_ui": [],
         "colunas_texto": {
             "numero_tombamento": "Nº Tombamento",
@@ -209,6 +218,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/itens_notas_fiscais",
         "prefixo": "itens_notas_fiscais",
         "frequencia": "anual",
+        "parametros_obrigatorios": ["exercicio_orcamento", "codigo_municipio"],
         "campos_ui": [],
         "colunas_texto": {
             "numero_nota_fiscal": "Nº Nota Fiscal",
@@ -232,6 +242,7 @@
         "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/bens_incorporados_patrimonio_municipio",
         "prefixo": "bens_incorporados_patrimonio_municipio",
         "frequencia": "intervalo_data",
+        "parametros_obrigatorios": ["codigo_municipio", "data_inicio", "data_fim"],
         "campos_ui": [],
         "colunas_texto": {
             "especificacao_bem": "Especificação do Bem",
@@ -248,6 +259,51 @@
             "grid_financeiro": [
                 {"coluna": "valor_bruto", "label_caixa": "Valor de Incorporação"}
             ]
+        }
+    },
+    "Veiculos Municipais": {
+        "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/veiculos_municipais",
+        "prefixo": "veiculos_municipais",
+        "frequencia": "mensal",
+        "parametros_obrigatorios": ["codigo_municipio", "data_referencia_doc"],
+        "campos_ui": [],
+        "colunas_texto": {
+            "codigo_municipio": "Codigo do Municipio",
+            "nome_proprietario": "Nome Proprietario",
+            "marca": "Marca",
+            "modelo_versao": "Modelo",
+            "cor_predominante": "Cor"
+        },
+        "layout_card": {
+            "topo_esq": "odometro",
+            "titulo_grande": "marca",
+            "meta_1": "codigo_municipio",
+            "meta_2": "nome_proprietario",
+            "corpo_texto": "modelo_versao",
+            "grid_financeiro": [
+                {"coluna": "odometro", "label_caixa": "Odometro"}
+            ]
+        }
+    },
+    "Destinação Veiculos": {
+        "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/destinacao_veiculos",
+        "prefixo": "destinacao_veiculos",
+        "frequencia": "mensal",
+        "parametros_obrigatorios": ["codigo_municipio", "data_referencia_doc"],
+        "campos_ui": [],
+        "colunas_texto": {
+            "codigo_municipio": "Codigo do Municipio",
+            "codigo_orgao": "Codigo Orgão",
+            "codigo_unidade_orcamentaria": "Codigo Unidade Orçamentaria",
+            "codigo_finalidade_veiculo": "Codigo Finalidade do Veiculo"
+        },
+        "layout_card": {
+            "topo_esq": "numero_tombamento",
+            "titulo_grande": "especificacao_bem",
+            "meta_1": "codigo_municipio",
+            "meta_2": "data_inclusao_uo",
+            "corpo_texto": "descricao_bem",
+            "grid_financeiro": []
         }
     }
 }

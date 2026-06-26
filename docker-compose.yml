@@ -4,29 +4,36 @@ services:
     container_name: tce_app
     environment:
       - PYTHONDONTWRITEBYTECODE=1
-      # - STREAMLIT_SERVER_FILE_WATCHER_TYPE=none <-- DESATIVADO PARA DEV
-      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll # <-- Permite o Streamlit atualizar sozinho!
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
       - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
     volumes:
-      - ./src:/app/src
-      - ./data:/app/data
-      - ./data_internal:/app/data_internal
-      - ./endpoints.json:/app/endpoints.json     # 🕳️ Buraco de minhoca do Endpoints
-      - ./municipios.json:/app/municipios.json   # 🕳️ Buraco de minhoca dos Municípios
+      - .:/app
       - /app/__pycache__
+      - /app/venv
+      - /app/.git
     ports:
       - "8501:8501"
     command: streamlit run src/app.py --server.port=8501 --server.address=0.0.0.0
+    restart: unless-stopped
 
   extrator:
     build: .
     container_name: tce_extrator
     volumes:
-      - ./src:/app/src
-      - ./data:/app/data
-      - ./data_internal:/app/data_internal
-      - ./endpoints.json:/app/endpoints.json     # 🕳️ Extrator também enxerga o JSON real
-      - ./municipios.json:/app/municipios.json
+      - .:/app
       - /app/__pycache__
+      - /app/venv
+      - /app/.git
     command: python src/main.py 2024 2026
     restart: "no"
+
+  cli:
+    build: .
+    profiles: ["tools"]          # 🛡️ O ESCUDO: O comando 'up' ignora este serviço!
+    stdin_open: true             # Equivalente ao -i (Mantém o canal de texto aberto)
+    tty: true                    # Equivalente ao -t (Engana o Python dizendo que há um monitor)
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /app/venv
+    command: python src/main.py  # Sem argumentos -> Força cair no Wizard!

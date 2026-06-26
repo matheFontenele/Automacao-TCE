@@ -18,22 +18,8 @@ from tqdm import tqdm
 # ==============================================================
 
 PASTA_DADOS = "/app/data"
-
-# Mapeamento para garantir que o nome da aba encontre o arquivo correto no disco
-DATA_MAP = {
-    "Notas de Empenho": "notas_empenho",
-    "Notas Fiscais": "notas_fiscais",
-    "Notas de Pagamento": "notas_pagamentos",
-    "Pagamento e Liquidações": "pagamento_e_liquidacoes",
-    "Liquidações": "liquidacoes",
-    "Itens de Notas Fiscais": "itens_notas_fiscais",
-    "Bens Incorporados ao Patrimônio": "bens_incorporados_patrimonio_municipio",
-    "Controle de bens": "controle_besn_unidades_orcamentarias",
-    "Ajuste, Reavaliação e Desincorporação": "ajuste_reavaliacao_patrimonial_desincorporacao_bem_municipio",
-    "Contas Redutoras e Bens Incorporados": "contas_redutoras_bens_incorporados_patrimonio_municipio",
-    "Controle de bens e notas de empenho": "controle_besn_notas_empenho"
-}
-
+# Cria um armazenamento local por thread para garantir isolamento e thread-safety
+thread_local = threading.local()
 
 # Carrega a lista de municípios do arquivo JSON para uso na geração das tarefas de extração
 def carregar_municipios():
@@ -222,9 +208,6 @@ def renderizar_aba_consulta(tipo_dado_selecionado):
 # INICIO DE BLOCOS DE PROCESSAMENTO
 # ==============================================================
 
-# Cria um armazenamento local por thread para garantir isolamento e thread-safety
-thread_local = threading.local()
-
 def obter_sessao(forcar_nova=False):
     # Se forçado, deleta a sessão antiga do escopo local da Thread
     if forcar_nova and hasattr(thread_local, "session"):
@@ -341,86 +324,98 @@ def processar_lote(task):
 
 # Gera a lista de tarefas a partir dos filtros aplicados na interface do Streamlit
 def gerar_tarefas(ano, municipio_selecionado, endpoints_alvo=None):
-    """Gera tarefas dinamicamente focando em um único ano fechado (Janeiro a Dezembro)."""
+    """Gera tarefas dinamicamente lendo URLs, frequências e parâmetros do endpoints.json."""
     municipios = carregar_municipios()
     if municipio_selecionado:
         municipios = [m for m in municipios if m['codigo_municipio'] == municipio_selecionado['codigo_municipio']]
 
     lista_de_tarefas = []
 
-    # Organização estrita dos endpoints do seu projeto
-    endpoints_mensais = [
-        ("notas_empenho", "https://api-dados-abertos.tce.ce.gov.br/sim/notas_empenhos"),
-        ("notas_fiscais", "https://api-dados-abertos.tce.ce.gov.br/sim/notas_fiscais"),
-        ("notas_pagamentos", "https://api-dados-abertos.tce.ce.gov.br/sim/notas_pagamentos"),
-        ("pagamento_e_liquidacoes", "https://api-dados-abertos.tce.ce.gov.br/sim/pagamentos_liquidacoes"),
-        ("liquidacoes", "https://api-dados-abertos.tce.ce.gov.br/sim/liquidacoes"),
-        ("controle_besn_unidades_orcamentarias", "https://api-dados-abertos.tce.ce.gov.br/sim/controle_bens_unidades_orcamentarias"),
-        ("ajuste_reavaliacao_patrimonial_desincorporacao_bem_municipio", "https://api-dados-abertos.tce.ce.gov.br/sim/ajuste_reavaliacao_patrimonial_desincorporacao_bem_municipio"),
-        ("controle_besn_notas_empenho", "https://api-dados-abertos.tce.ce.gov.br/sim/controle_bens_notas_empenhos"),
-        ("contas_redutoras_bens_incorporados_patrimonio_municipio", "https://api-dados-abertos.tce.ce.gov.br/sim/contas_redutoras_bens_incorporados_patrimonio_municipio")
-    ]
-    
-    endpoints_anuais = [("itens_notas_fiscais", "https://api-dados-abertos.tce.ce.gov.br/sim/itens_notas_fiscais")]
-    endpoints_intervalo_data = [("bens_incorporados_patrimonio_municipio", "https://api-dados-abertos.tce.ce.gov.br/sim/bens_incorporados_patrimonio_municipio")]
+    # 1. CARREGA A VERDADE UNIVERSAL (endpoints.json)
+    try:
+        with open('endpoints.json', 'r', encoding='utf-8') as f:
+            config_json = json.load(f)
+    except Exception as e:
+        print(f"🚨 [EXTRACTION] Erro crítico ao ler endpoints.json: {e}")
+        return []
 
-    # Filtra os endpoints antes de rodar os loops pesados
-    if endpoints_alvo:
-        endpoints_mensais = [e for e in endpoints_mensais if e[0] in endpoints_alvo]
-        endpoints_anuais = [e for e in endpoints_anuais if e[0] in endpoints_alvo]
-        endpoints_intervalo_data = [e for e in endpoints_intervalo_data if e[0] in endpoints_alvo]
-
-    # Variável padrão utilizada pela API do TCE
     exercicio = int(f"{ano}00")
 
-    # 1. Montagem das Tarefas Mensais (Itera fixo de 1 a 12 para o ano informado)
-    if endpoints_mensais:
-        for mes in range(1, 13):
-            data_ref = int(f"{ano}{str(mes).zfill(2)}")
-            for nome, url in endpoints_mensais:
-                for m in municipios:
-                    caminho = os.path.join('data', f"{nome}_{ano}_{mes:02d}_{m['codigo_municipio']}.parquet")
-                    lista_de_tarefas.append({
-                        'dataset_nome': nome, 'url': url, 'municipio_nome': m['nome_municipio'],
-                        'ano_referencia': ano,
-                        'params': {
-                            "exercicio_orcamento": exercicio, "data_referencia_doc": data_ref, 
-                            "$format": "json", "codigo_municipio": m['codigo_municipio'],
-                            "$count": 1000, "$start_index": 0
-                        },
-                        'caminho_arquivo': caminho
-                    })
+    # =========================================================================
+    # FUNÇÃO AUXILIAR: Monta os parâmetros dinamicamente baseado no JSON
+    # =========================================================================
+    def montar_params(parametros_obrigatorios, codigo_mun, mes=None):
+        """
+        Constrói o dicionário de parâmetros da API a partir da lista de 
+        parâmetros obrigatórios declarados no endpoints.json.
+        """
+        params = {
+            "$format": "json",
+            "$count": 1000,
+            "$start_index": 0
+        }
+        
+        for param in parametros_obrigatorios:
+            if param == "exercicio_orcamento":
+                params[param] = exercicio
+            elif param == "codigo_municipio":
+                params[param] = codigo_mun
+            elif param == "data_referencia_doc":
+                # Formato YYYYMM (ex: 202401, 202402...)
+                if mes is not None:
+                    params[param] = int(f"{ano}{str(mes).zfill(2)}")
+            elif param == "data_inicio":
+                params[param] = f"{ano}-01-01"
+            elif param == "data_fim":
+                params[param] = f"{ano}-12-31"
+            # Adicione aqui novos parâmetros conforme forem surgindo
+            # elif param == "outro_param":
+            #     params[param] = ...
+        
+        return params
 
-    # 2. Montagem das Tarefas Anuais
-    if endpoints_anuais:
-        for nome, url in endpoints_anuais:
-            for m in municipios:
-                caminho = os.path.join('data', f"{nome}_{ano}_{m['codigo_municipio']}.parquet")
-                lista_de_tarefas.append({
-                    'dataset_nome': nome, 'url': url, 'municipio_nome': m['nome_municipio'],
-                    'ano_referencia': ano,
-                    'params': {
-                        "exercicio_orcamento": exercicio, "$format": "json", 
-                        "codigo_municipio": m['codigo_municipio'], "$count": 1000, "$start_index": 0
-                    },
-                    'caminho_arquivo': caminho
-                })
-            
-    # 3. Montagem das Tarefas por Intervalo Customizado (Bens Incorporados travado no ano)
-    if endpoints_intervalo_data:
-        data_inicio_str = f"{ano}-01-01"
-        data_fim_str = f"{ano}-12-31"
+    # =========================================================================
+    # 2. ITERA PELOS ENDPOINTS E GERA AS TAREFAS
+    # =========================================================================
+    for nome_display, meta in config_json.items():
+        prefixo = meta.get("prefixo")
+        url = meta.get("endpoint")
+        freq = meta.get("frequencia", "mensal").lower().strip()
+        parametros_obrigatorios = meta.get("parametros_obrigatorios", [])
 
-        for data, url in endpoints_intervalo_data:
+        if not prefixo or not url:
+            continue
+
+        # FILTRO BLINDADO: Aceita prefixo OU nome de display
+        if endpoints_alvo:
+            if (prefixo not in endpoints_alvo) and (nome_display not in endpoints_alvo):
+                continue
+
+        # Validação: se não houver parâmetros obrigatórios, não gera tarefas
+        if not parametros_obrigatorios:
+            print(f"⚠️ [EXTRACTION] {nome_display} não tem 'parametros_obrigatorios' no JSON. Ignorando.")
+            continue
+
+        # Decide quantas iterações baseado na frequência
+        iteracoes_mensais = range(1, 13) if freq == "mensal" else [None]
+
+        for mes in iteracoes_mensais:
             for m in municipios:
-                caminho = os.path.join('data', f"{data}_{ano}_{m['codigo_municipio']}.parquet")
+                # Monta o nome do arquivo (com ou sem mês)
+                if mes is not None:
+                    caminho = os.path.join('data', f"{prefixo}_{ano}_{mes:02d}_{m['codigo_municipio']}.parquet")
+                else:
+                    caminho = os.path.join('data', f"{prefixo}_{ano}_{m['codigo_municipio']}.parquet")
+
+                # Monta os parâmetros dinamicamente
+                params = montar_params(parametros_obrigatorios, m['codigo_municipio'], mes)
+
                 lista_de_tarefas.append({
-                    'dataset_nome': data, 'url': url, 'municipio_nome': m['nome_municipio'],
+                    'dataset_nome': prefixo,
+                    'url': url,
+                    'municipio_nome': m['nome_municipio'],
                     'ano_referencia': ano,
-                    'params': {
-                        'codigo_municipio': m['codigo_municipio'], 'data_inicio': data_inicio_str, 
-                        'data_fim': data_fim_str, '$format': 'json', '$count': 1000, '$start_index': 0
-                    },
+                    'params': params,
                     'caminho_arquivo': caminho
                 })
 
@@ -429,83 +424,94 @@ def gerar_tarefas(ano, municipio_selecionado, endpoints_alvo=None):
 # Renderiza a página de extração no Streamlit, com os controles de filtro e a área de logs
 def executar_pipeline(ano, municipio_selecionado=None, endpoints_alvo=None, log_func=print):
     os.makedirs('data', exist_ok=True)
-
-    # Ajustado para refletir o ano único nos logs
     periodo_str = f"Ano {ano}"
 
-    log_func(f"[{periodo_str}] Iniciando extração...")
+    log_func(f"🚀 [{periodo_str}] Calculando fila de ingestão...")
 
-    # 1. Gera as tarefas já filtradas na origem focado no ano informado
+    # 1. A chamada já nasce acoplada com a nova assinatura dinâmica:
     tarefas = gerar_tarefas(ano, municipio_selecionado, endpoints_alvo=endpoints_alvo)
     
     if not tarefas:
-        log_func(f"[{periodo_str}] Nenhuma tarefa encontrada para os filtros selecionados.")
+        log_func(f"⚠️ [{periodo_str}] Nenhuma tarefa gerada para os critérios informados.")
         return
 
-    log_func(f"[{periodo_str}] Total de tarefas a processar: {len(tarefas)}")
+    log_func(f"📦 [{periodo_str}] Matriz montada: {len(tarefas)} requisições prontas para despacho.")
 
-    baixados = 0
-    ignorados = 0
-    erros = 0
+    baixados, ignorados, erros = 0, 0, 0
+    erros_consecutivos = 0  
     
-    # Execução Paralela Monitorada (Thread-Safe para Streamlit)
+    # max_workers=3 é o "Ponto Doce" comprovado para não tomar IP Ban de firewall governamental
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         futuros = {executor.submit(processar_lote, tarefa): tarefa for tarefa in tarefas}
-        pbar = tqdm(concurrent.futures.as_completed(futuros), total=len(tarefas), desc=f"Baixando {periodo_str}")
-        
-        erros_consecutivos = 0  
+        pbar = tqdm(concurrent.futures.as_completed(futuros), total=len(tarefas), desc=f"Ingerindo {periodo_str}")
         
         for futuro in pbar:
             try:
                 status, msg_log = futuro.result()
                 
-                # --- LÓGICA DE PROTEÇÃO: Monitoramento de falhas ---
-                if status == "ERRO_CONEXAO" or "Status 429" in msg_log:
+                # ==============================================================
+                # 🛡️ UPGRADE 1: O Termômetro de Saúde Expandido
+                # ==============================================================
+                # Soma erro se caiu a internet (ERRO_CONEXAO), se o servidor deles engasgou (ERRO_API) ou WAF 429
+                if status in ["ERRO_CONEXAO", "ERRO_API"] or "Status 429" in msg_log or "Status 50" in msg_log:
                     erros_consecutivos += 1
                 else:
-                    erros_consecutivos = 0  # Reseta se o processo teve sucesso ou foi ignorado
+                    erros_consecutivos = 0  # Tomou fôlego e deu certo? Zera o contador.
                 
-                # Se atingir o limite de falhas, pausa para resfriar a conexão
-                if erros_consecutivos >= 15: 
-                    log_func("🚨 [ALERTA] Muitos erros detectados. Pausando por 30s para evitar bloqueio...")
+                # Defesa Nível 1: Resfriamento (O servidor do Estado deu uma engasgada)
+                if erros_consecutivos == 15: 
+                    log_func("🚨 [WAF ALERTA] TCE barrando requisições da API. Dormindo 30s para esfriar o IP...")
                     time.sleep(30)
-                    erros_consecutivos = 0 # Reseta após a pausa
-                # ----------------------------------------------------
+                
+                # ==============================================================
+                # 💀 UPGRADE 2: O "Circuit Breaker" Nuclear (Salva-Vidas)
+                # ==============================================================
+                elif erros_consecutivos >= 30:
+                    log_func("💀 [CIRCUIT BREAKER] Portal do TCE indisponível. Abortando fila para não travar o servidor!")
+                    executor.shutdown(wait=False, cancel_futures=True) # Ejetar!
+                    break
+                # ==============================================================
 
-                # Lógica original de log
-                if log_func.__name__ == "log_colorido_terminal":
+                # Despacho de Log blindado contra closures/lambdas do Streamlit
+                nome_func_log = getattr(log_func, '__name__', '')
+                if nome_func_log == "log_colorido_terminal":
                     log_func(msg_log)
                 elif log_func == print:
                     pbar.write(msg_log)
                 else:
                     log_func(msg_log)
                 
-                if status == "BAIXADO":
-                    baixados += 1
-                elif status == "IGNORADO":
-                    ignorados += 1
-                else:
-                    erros += 1
+                if status == "BAIXADO": baixados += 1
+                elif status == "IGNORADO": ignorados += 1
+                else: erros += 1
+
             except Exception as e:
-                msg_falha = f"❌ Erro crítico no processamento de uma thread: {e}"
+                msg_falha = f"❌ Erro crítico de alocação em thread isolada: {e}"
                 pbar.write(msg_falha) if log_func == print else log_func(msg_falha)
                 erros += 1
                 erros_consecutivos += 1 
 
-        log_func(f"[{periodo_str}] Resumo: {baixados} novos, {ignorados} já existiam, {erros} falhas/vazios.")
+    log_func(f"🏁 [{periodo_str}] Ingestão finalizada -> 📥 {baixados} novos | ⏭️ {ignorados} já no HD | ⚠️ {erros} falhas.")
 
 def render_extraction_page():
-    # --- INICIALIZAÇÃO DO ESTADO GLOBAL DOS LOGS E ARQUIVOS ---
+    # --- INICIALIZAÇÃO DO ESTADO GLOBAL ---
     if 'log_messages' not in st.session_state:
         st.session_state.log_messages = []
     if 'arquivos_criados' not in st.session_state:
         st.session_state.arquivos_criados = []
 
+    # 1. CARREGA O JSON NO TOPO DA PÁGINA
+    try:
+        with open('endpoints.json', 'r', encoding='utf-8') as f:
+            config_json = json.load(f)
+    except Exception as e:
+        st.error(f"🚨 Erro crítico: Não foi possível ler 'endpoints.json': {e}")
+        return
+
     # --- SIDEBAR (CONFIGURAÇÕES) ---
     with st.sidebar:
-        st.header("Configurações")
+        st.header("⚙️ Parâmetros de Extração")
         
-        # 1. Seletor de Ano Único (Substituindo o antigo range de datas)
         hoje = datetime.date.today()
         ano_selecionado = st.number_input(
             "Ano de Referência",
@@ -515,46 +521,44 @@ def render_extraction_page():
             step=1
         )
 
-        # 2. Seletor de Município
         lista_municipios = carregar_municipios()
         opcoes_mun = {f"{m['nome_municipio']} ({m['codigo_municipio']})": m for m in lista_municipios}
         
-        if 'mun_input' not in st.session_state: 
-            st.session_state.mun_input = "Todos"
-        
-        st.session_state.mun_input = st.selectbox(
-            "Município", 
+        mun_sel_ui = st.selectbox(
+            "🏙️ Município", 
             options=["Todos"] + list(opcoes_mun.keys())
         )
 
-        # 3. Multiselect de opções de dados
-        st.subheader("Tipo de Dado")
-        tipo_escolhido = st.selectbox(
-            "Selecione a tabela:",
-            options=list(DATA_MAP.keys())
-        )
+        mun_objeto = opcoes_mun.get(mun_sel_ui, None)
 
-        endpoints_alvo = [DATA_MAP[tipo_escolhido]]
+        st.subheader("📦 Tipo de Dado")
+        
+        # [CORREÇÃO 1] Ressuscitamos o Selectbox que havia sumido:
+        opcoes_tabela = ["🌐 [ EXTRAIR TODOS OS ENDPOINTS ]"] + list(config_json.keys())
+        tipo_escolhido = st.selectbox("Selecione o endpoint:", options=opcoes_tabela)
 
-        # Botão para Executar a Extração
-        btn_extrair = st.button("Executar Extração", use_container_width=True)
+        if tipo_escolhido == "🌐 [ EXTRAIR TODOS OS ENDPOINTS ]":
+            endpoints_alvo = None  
+        else:
+            prefixo_alvo = config_json[tipo_escolhido]["prefixo"]
+            endpoints_alvo = [prefixo_alvo]
+
+        st.divider()
+
+        # [CORREÇÃO 2] Ressuscitamos o Botão de disparo:
+        btn_extrair = st.button("🚀 Executar Extração", use_container_width=True, type="primary")
 
         # --- ÁREA DE LOGS E ARQUIVOS CRIADOS NA SIDEBAR ---
         log_placeholder = st.empty()
 
         if btn_extrair:
-            # Reseta os logs e a lista de arquivos criados
             st.session_state.log_messages = []
             st.session_state.arquivos_criados = []
-            
-            # Marca o timestamp de início para sabermos quais arquivos foram criados NESTA rodada
             inicio_extracao = time.time()
             
-            # Função de callback chamada pelo pipeline
             def stream_log(msg):
                 st.session_state.log_messages.append(msg)
                 
-                # Monitora a pasta 'data' em busca de novos arquivos parquet criados após o início_extracao
                 arquivos_atuais = []
                 if os.path.exists('data'):
                     for f in glob.glob(os.path.join('data', '*.parquet')):
@@ -565,7 +569,6 @@ def render_extraction_page():
                 
                 st.session_state.arquivos_criados = sorted(arquivos_atuais)
 
-                # Atualiza a interface gráfica em tempo real
                 with log_placeholder.container():
                     st.caption("🪵 Logs de Extração (Tempo Real)")
                     st.code("\n".join(st.session_state.log_messages[-50:]), language="text")
@@ -575,14 +578,12 @@ def render_extraction_page():
                         for arq in st.session_state.arquivos_criados:
                             st.markdown(f"🔹 `{arq}`")
 
-            municipio_selecionado = None if st.session_state.mun_input == "Todos" else opcoes_mun[st.session_state.mun_input]
-            
+            # [CORREÇÃO 3] Limpado o recálculo redundante. O mun_objeto já carrega a verdade:
             with st.spinner(f"Buscando {tipo_escolhido} (Ano {ano_selecionado}) no TCE..."):
                 try:
-                    # 🚀 CHAMADA ATUALIZADA: Passa o parâmetro 'ano' de forma direta
                     executar_pipeline(
                         ano=int(ano_selecionado), 
-                        municipio_selecionado=municipio_selecionado,
+                        municipio_selecionado=mun_objeto, # <-- Passado limpo direto na veia!
                         endpoints_alvo=endpoints_alvo, 
                         log_func=stream_log
                     )
@@ -590,7 +591,6 @@ def render_extraction_page():
                 except Exception as e:
                     st.error(f"Erro durante a extração: {e}")
         
-        # Mantém visível os logs e arquivos da última extração se o usuário navegar pelo app
         elif st.session_state.log_messages:
             with log_placeholder.container():
                 if st.session_state.arquivos_criados:
@@ -609,137 +609,162 @@ def render_extraction_page():
     # --- ÁREA PRINCIPAL ---
     st.header("Visualizar Dados")
 
-    def carregar_e_exibir_dados(tipo_arquivo_prefixo):
+    def carregar_e_exibir_dados_dinamico(nome_display, meta):
         pasta_dados = 'data'
-    
+        prefixo = meta.get("prefixo")
+        freq = meta.get("frequencia", "mensal").lower().strip()
+
+        if not prefixo:
+            return
+
         if not os.path.exists(pasta_dados):
             st.warning(f"📂 O diretório `{pasta_dados}` ainda não foi criado. Realize uma extração primeiro.")
             return
 
-        # Filtra apenas os arquivos que começam com o tipo de dado atual
+        # Busca estrita com traço (_) para não misturar 'notas' com 'notas_empenho'
+        prefixo_busca = f"{prefixo}_"
         arquivos_disponiveis = [
             f for f in os.listdir(pasta_dados) 
-            if f.startswith(tipo_arquivo_prefixo) and f.endswith('.parquet')
+            if f.startswith(prefixo_busca) and f.endswith('.parquet')
         ]
 
         if not arquivos_disponiveis:
-            st.warning(f"⚠️ Nenhum arquivo de `{tipo_arquivo_prefixo}` encontrado no disco.")
+            st.warning(f"⚠️ Nenhum arquivo de `{nome_display}` encontrado no disco.")
             st.info("Configure os parâmetros na barra lateral e clique em 'Executar Extração'.")
             return
 
-        # Extração reversa inteligente de metadados baseada no nome do arquivo
-        anos = set()
-        meses = set()
-        municipios = set()
+        # =========================================================================
+        # 1. EXTRAÇÃO DE METADADOS (Matemática do Miolo à prova de tabelas anuais)
+        # =========================================================================
+        anos, meses, municipios = set(), set(), set()
 
         for arq in arquivos_disponiveis:
-            partes = arq.replace('.parquet', '').split('_')
-            if len(partes) >= 3:
-                # Identifica a posição dos metadados independente do tamanho do prefixo
-                anos.add(partes[-3])
-                meses.add(partes[-2])
-                municipios.add(partes[-1])
+            miolo = arq.replace(prefixo_busca, "").replace(".parquet", "")
+            partes = miolo.split('_')
 
-        # Bloco Visual de Filtros Lado a Lado
+            if freq == "mensal" and len(partes) >= 3:
+                anos.add(partes[0])
+                meses.add(partes[1])
+                municipios.add(partes[2])
+            elif freq in ["anual", "intervalo_data"] and len(partes) >= 2:
+                anos.add(partes[0])
+                municipios.add(partes[1]) # Na carga anual, o índice [1] é sempre o município
+
+        st.markdown("### 🛠️ Filtros de Inspeção")
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            ano_sel = st.selectbox("📅 Ano", ["Todos"] + sorted(list(anos)), key=f"ano_{tipo_arquivo_prefixo}")
+            ano_sel = st.selectbox("📅 Ano", ["Todos"] + sorted(list(anos)), key=f"ext_ano_{prefixo}")
+            
         with col2:
-            mes_sel = st.selectbox("📆 Mês", ["Todos"] + sorted(list(meses)), key=f"mes_{tipo_arquivo_prefixo}")
+            if freq == "mensal":
+                mes_sel = st.selectbox("📆 Mês", ["Todos"] + sorted(list(meses)), key=f"ext_mes_{prefixo}")
+            else:
+                st.selectbox("📆 Mês", ["N/A (Carga Anual)"], disabled=True, key=f"ext_mes_dis_{prefixo}")
+                mes_sel = "Todos"
+                
         with col3:
-            mun_sel = st.selectbox("🏙️ Código Município", ["Todos"] + sorted(list(municipios)), key=f"mun_{tipo_arquivo_prefixo}")
+            mun_sel = st.selectbox("🏙️ Município", ["Todos"] + sorted(list(municipios)), key=f"ext_mun_{prefixo}")
 
-        # Aplicação estruturada dos filtros na listagem
-        arquivos_filtrados = arquivos_disponiveis
-        if ano_sel != "Todos":
-            arquivos_filtrados = [f for f in arquivos_filtrados if f.split('_')[-3] == ano_sel]
-        if mes_sel != "Todos":
-            arquivos_filtrados = [f for f in arquivos_filtrados if f.split('_')[-2] == mes_sel]
-        if mun_sel != "Todos":
-            arquivos_filtrados = [f for f in arquivos_filtrados if f.split('_')[-1].replace('.parquet', '') == mun_sel]
+        # =========================================================================
+        # 2. FILTRAGEM DOS ARQUIVOS DISPONÍVEIS
+        # =========================================================================
+        arquivos_filtrados = []
+        for arq in arquivos_disponiveis:
+            miolo = arq.replace(prefixo_busca, "").replace(".parquet", "")
+            p = miolo.split('_')
+
+            match_ano = (ano_sel == "Todos") or (p[0] == ano_sel)
+            match_mun = (mun_sel == "Todos") or (p[-1] == mun_sel)
+            match_mes = (mes_sel == "Todos") or (p[1] == mes_sel) if freq == "mensal" else True
+
+            if match_ano and match_mes and match_mun:
+                arquivos_filtrados.append(arq)
 
         st.divider()
 
-        # Exibição do resultado filtrado
+        # =========================================================================
+        # 3. PRESERVAÇÃO INTEGRAL DA SUA LÓGICA DE MESCLAGEM E MULTISELECT
+        # =========================================================================
         if arquivos_filtrados:
-            st.success(f"🎯 Encontrado(s) **{len(arquivos_filtrados)}** arquivo(s) correspondente(s) aos filtros.")
+            st.success(f"🎯 Encontrado(s) **{len(arquivos_filtrados)}** arquivo(s) correspondente(s).")
             
-            # --- NOVO: LÓGICA DE SELEÇÃO MÚLTIPLA E MESCLAGEM ---
             col_chk, _ = st.columns([1, 1])
             with col_chk:
-                selecionar_todos = st.checkbox("✅ Selecionar todos os arquivos filtrados", value=False, key=f"chk_all_{tipo_arquivo_prefixo}")
+                selecionar_todos = st.checkbox("✅ Selecionar todos os filtrados", value=False, key=f"chk_all_{prefixo}")
             
             if selecionar_todos:
                 arquivos_selecionados = arquivos_filtrados
-                st.info(f"📦 Todos os **{len(arquivos_filtrados)}** arquivos foram selecionados automaticamente.")
+                st.info(f"📦 Todos os **{len(arquivos_filtrados)}** arquivos foram marcados para fusão.")
             else:
                 arquivos_selecionados = st.multiselect(
                     "📄 Selecione os arquivos que deseja mesclar:", 
                     options=arquivos_filtrados,
                     default=None,
-                    key=f"multi_{tipo_arquivo_prefixo}"
+                    key=f"multi_{prefixo}"
                 )
             
-            # Botão de ação destacado para carregar e concatenar os dataframes
             if arquivos_selecionados:
                 botao_label = f"📊 Carregar e Mesclar {len(arquivos_selecionados)} arquivo(s)"
                 
-                if st.button(botao_label, use_container_width=True, type="primary", key=f"btn_{tipo_arquivo_prefixo}"):
+                if st.button(botao_label, use_container_width=True, type="primary", key=f"btn_merge_{prefixo}"):
                     try:
-                        with st.spinner("Decodificando e concatenando bases Parquet de alta performance..."):
+                        with st.spinner("Decodificando e concatenando bases Parquet em alta velocidade..."):
                             lista_dfs = []
                             
-                            # Itera por cada arquivo selecionado, lê e joga na lista
                             for arquivo in arquivos_selecionados:
                                 caminho_completo = os.path.join(pasta_dados, arquivo)
                                 df_individual = pd.read_parquet(caminho_completo)
-                                
-                                # Garante que não vai quebrar se algum parquet estiver vazio por acidente
                                 if not df_individual.empty:
                                     lista_dfs.append(df_individual)
                             
                             if lista_dfs:
-                                # Junta tudo em um único DataFrame gigante mantendo o padrão das colunas
                                 df_final = pd.concat(lista_dfs, ignore_index=True)
                                 
-                                # Exibe métricas rápidas consolidadas
                                 m1, m2 = st.columns(2)
                                 m1.metric("Total de Linhas Combinadas", f"{len(df_final):,}".replace(",", "."))
                                 m2.metric("Total de Colunas", len(df_final.columns))
                                 
-                                st.markdown("### 📋 Tabela de Dados Combinada (Amostra)")
+                                st.markdown("### 📋 Tabela de Dados Combinada")
                                 st.dataframe(df_final, use_container_width=True, hide_index=True)
                                 
-                                # Define um nome inteligente e limpo para o arquivo de download
-                                nome_download = f"consolidado_{tipo_arquivo_prefixo}"
+                                nome_download = f"consolidado_{prefixo}"
                                 if ano_sel != "Todos": nome_download += f"_{ano_sel}"
                                 if mun_sel != "Todos": nome_download += f"_{mun_sel}"
                                 nome_download += ".csv"
                                 
-                                # Download nativo do CSV unificado convertido em tempo de execução
                                 st.download_button(
                                     label="📥 Exportar Base unificada para CSV (Excel)",
                                     data=df_final.to_csv(index=False, sep=';', encoding='utf-8-sig').encode('utf-8-sig'),
                                     file_name=nome_download,
                                     mime='text/csv',
                                     use_container_width=True,
-                                    key=f"dl_{tipo_arquivo_prefixo}"
+                                    key=f"dl_consolidado_{prefixo}"
                                 )
                             else:
-                                st.warning("⚠️ Os arquivos selecionados estavam sem registros válidos para combinar.")
+                                st.warning("⚠️ Os arquivos selecionados não continham registros válidos.")
                                 
                     except Exception as e:
-                        st.error(f"❌ Erro crítico ao processar/mesclar os arquivos Parquet: {e}")
+                        st.error(f"❌ Erro crítico na operação de I/O do Pandas: {e}")
             else:
-                st.info("💡 Escolha os arquivos acima ou marque 'Selecionar todos os arquivos filtrados' para gerar a exportação unificada.")
+                st.info("💡 Escolha os arquivos acima ou marque 'Selecionar todos' para gerar a visualização.")
         else:
             st.error("❌ Nenhum arquivo encontrado para a combinação de filtros selecionada.")
 
-    # Criação dinâmica das abas na área principal do app
-    abas = st.tabs(list(DATA_MAP.keys()))
-    
-    for i, name_tab in enumerate(DATA_MAP.keys()):
-        with abas[i]:
-            # Invoca a nova lógica de filtros acoplada para cada dataset correspondente
-            carregar_e_exibir_dados(DATA_MAP[name_tab])
+
+    # =============================================================================
+    # GERAÇÃO DINÂMICA DAS ABAS (O fim definitivo do DATA_MAP engessado)
+    # =============================================================================
+    try:
+        with open('endpoints.json', 'r', encoding='utf-8') as f:
+            CONFIG_GERAL_JSON = json.load(f)
+    except Exception as e:
+        st.error(f"🚨 Não foi possível carregar o arquivo endpoints.json: {e}")
+        st.stop()
+
+    nomes_das_abas = list(CONFIG_GERAL_JSON.keys())
+    componentes_abas = st.tabs(nomes_das_abas)
+
+    for idx, nome_display in enumerate(nomes_das_abas):
+        with componentes_abas[idx]:
+            carregar_e_exibir_dados_dinamico(nome_display, CONFIG_GERAL_JSON[nome_display])

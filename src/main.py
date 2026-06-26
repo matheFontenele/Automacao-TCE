@@ -1,44 +1,198 @@
 import os
 import sys
 import datetime
-import requests
-import pandas as pd
-import concurrent.futures
 import json
 from tqdm import tqdm
 from modules.extraction import processar_lote, gerar_tarefas, executar_pipeline, formatar_log_terminal
 
+# =========================================================================
+# WIZARD INTERATIVO DE TERMINAL (CLI ENGINE)
+# =========================================================================
 
-# Função principal para execução direta via terminal
+def carregar_json_seguro(caminho):
+    try:
+        with open(caminho, 'r', encoding='utf-8') as f:
+            conteudo_arquivo = json.load(f)
+        
+            if isinstance(conteudo_arquivo, dict):
+                return conteudo_arquivo.get("elements", conteudo_arquivo)
+            
+            return conteudo_arquivo
+            
+    except Exception as e:
+        print(f"\033[31m❌ Erro crítico no código ao ler '{caminho}': {e}\033[0m")
+        sys.exit(1)
+
+
+def questionar_municipio(lista_muns):
+    mapa_cod = {m['codigo_municipio']: m for m in lista_muns}
+    
+    while True:
+        resp = input("\n🏙️  \033[1mMUNICÍPIO\033[0m [Código exato | 'L' para Listar | 'T' ou Enter para Todos]: ").strip().upper()
+        
+        if resp in ['T', '']:
+            print("   └── Alvo: \033[33mTodos os Municípios do Estado\033[0m")
+            return None
+        
+        if resp == 'L':
+            print("\n   ─── LISTA OFICIAL DE MUNICÍPIOS (TCE-CE) ───")
+            muns_ord = sorted(lista_muns, key=lambda x: x['nome_municipio'])
+            # Imprime em 3 colunas paralelas para não estourar o buffer da tela
+            for i in range(0, len(muns_ord), 3):
+                bloco = muns_ord[i:i+3]
+                linha = "   ".join([f"\033[36m{m['codigo_municipio']}\033[0m: {m['nome_municipio'][:16]:<16}" for m in bloco])
+                print(f"   {linha}")
+            print("   ────────────────────────────────────────────")
+            continue
+            
+        if resp in mapa_cod:
+            escolhido = mapa_cod[resp]
+            print(f"   └── Alvo: \033[32m{escolhido['nome_municipio']} ({resp})\033[0m")
+            return escolhido
+            
+        print("   \033[31m❌ Código não encontrado. Digite 'L' para consultar a tabela.\033[0m")
+
+
+def questionar_endpoint(config_ends):
+    lista_opcoes = list(config_ends.items())
+    mapa_prefixos = {meta["prefixo"].lower(): meta["prefixo"] for _, meta in lista_opcoes}
+    
+    # Cria atalhos numéricos [1, 2... N] dinamicamente lendo a posição do JSON
+    mapa_num = {}
+    for idx, (_, meta) in enumerate(lista_opcoes):
+        n = idx + 1
+        mapa_num[str(n)] = meta["prefixo"]
+        mapa_num[f"{n:02d}"] = meta["prefixo"]
+
+    while True:
+        resp = input("\n📦  \033[1mENDPOINT\033[0m [Prefixo ou Nº | 'L' para Listar | 'T' ou Enter para Todos]: ").strip().lower()
+        
+        if resp in ['t', '']:
+            print("   └── Alvo: \033[33mTodos os Endpoints cadastrados\033[0m")
+            return None
+            
+        if resp == 'l':
+            print("\n   ─── ENDPOINTS CADASTRADOS NO SISTEMA ───")
+            for idx, (nome_ui, meta) in enumerate(lista_opcoes):
+                print(f"   [\033[33m{idx+1:02d}\033[0m] \033[36m{meta['prefixo']:<38}\033[0m ({nome_ui})")
+            print("   ────────────────────────────────────────")
+            continue
+            
+        alvo = mapa_num.get(resp) or mapa_prefixos.get(resp)
+        
+        if alvo:
+            print(f"   └── Alvo: \033[32m{alvo}\033[0m")
+            return [alvo]
+            
+        print("   \033[31m❌ Opção inválida. Digite 'L' para ver os índices correspondentes.\033[0m")
+
+
+def questionar_anos():
+    ano_atual = datetime.date.today().year
+    while True:
+        resp = input(f"\n📅  \033[1mANO(S)\033[0m [Ex: 2026 | Período: 2008-2026 | 'T' ou Enter para 2008..{ano_atual}]: ").strip().upper()
+        
+        if resp in ['T', '']:
+            anos = list(range(2008, ano_atual + 1))
+            print(f"   └── Alvo: \033[33m{anos[0]} até {anos[-1]}\033[0m")
+            return anos
+            
+        if '-' in resp:
+            try:
+                p1, p2 = resp.split('-')
+                a1, a2 = int(p1.strip()), int(p2.strip())
+                anos = list(range(min(a1, a2), max(a1, a2) + 1))
+                print(f"   └── Alvo: \033[32mPeríodo {anos[0]} ➔ {anos[-1]}\033[0m")
+                return anos
+            except ValueError:
+                pass
+        else:
+            try:
+                ano_v = int(resp)
+                print(f"   └── Alvo: \033[32mAno estrito {ano_v}\033[0m")
+                return [ano_v]
+            except ValueError:
+                pass
+                
+        print("   \033[31m❌ Formato incorreto. Digite um ano (ex: 2025) ou intervalo (ex: 2008-2026).\033[0m")
+
+
+# =========================================================================
+# PONTO DE ENTRADA DO SISTEMA
+# =========================================================================
 if __name__ == "__main__":
-    # Valores padrão caso rode sem argumentos
-    ano_inicio = 2025
-    ano_fim = 2025
-
-    # Lendo argumentos do terminal (ex: python main.py 2024 2026)
-    if len(sys.argv) == 2:
-        ano_inicio = int(sys.argv[1])
-        ano_fim = ano_inicio
-    elif len(sys.argv) >= 3:
-        ano_inicio = min(int(sys.argv[1]), int(sys.argv[2]))
-        ano_fim = max(int(sys.argv[1]), int(sys.argv[2]))
-
-    # Função interna para interceptar e colorir os logs enviados pelas threads
     def log_colorido_terminal(msg):
         msg_formatada = formatar_log_terminal(msg)
         tqdm.write(msg_formatada)
 
-    print(f"\033[36m🚀 Preparando ambiente para extração de dados...\033[0m")
+    anos_alvos = []
+    mun_alvo = None
+    endpoints_alvo = None
+
+    # 1. ENCRUZILHADA DE COMPORTAMENTO
+    if len(sys.argv) > 1:
+        # =====================================================================
+        # MODO AUTÔNOMO (Acionado pelo Docker Compose / Cronjobs)
+        # Exemplo: python main.py 2008 2026
+        # =====================================================================
+        ano_inicio = int(sys.argv[1])
+        ano_fim = int(sys.argv[2]) if len(sys.argv) >= 3 else ano_inicio
+        anos_alvos = list(range(min(ano_inicio, ano_fim), max(ano_inicio, ano_fim) + 1))
+        
+        print(f"\033[36m🤖 [MODO AUTÔNOMO] Disparando extração em lote para: {anos_alvos}\033[0m")
+
+    else:
+        # =====================================================================
+        # MODO INTERATIVO (Acionado pelo desenvolvedor no terminal via 'tce')
+        # =====================================================================
+        print("\033[H\033[J", end="") # Limpa a tela de forma nativa via ANSI
+        print("\033[36m" + "═"*64)
+        print(" 🏛️   TCE-CE INGESTION ENGINE — TERMINAL INTERATIVO")
+        print("═"*64 + "\033[0m")
+
+        base_muns = carregar_json_seguro('municipios.json')
+        base_ends = carregar_json_seguro('endpoints.json')
+
+        mun_alvo = questionar_municipio(base_muns)
+        endpoints_alvo = questionar_endpoint(base_ends)
+        anos_alvos = questionar_anos()
+
+        # Quadro de Confirmação Pré-Voo
+        print("\n\033[33m" + "─"*64)
+        print(" 📋 RESUMO DO DESPACHO:")
+        str_mun = f"{mun_alvo['nome_municipio']} ({mun_alvo['codigo_municipio']})" if mun_alvo else "TODOS OS MUNICÍPIOS"
+        str_end = endpoints_alvo[0] if endpoints_alvo else "TODOS OS ENDPOINTS"
+        
+        print(f" 🔹 Município : {str_mun}")
+        print(f" 🔹 Endpoint  : {str_end}")
+        print(f" 🔹 Anos      : {anos_alvos}")
+        print("─"*64 + "\033[0m")
+
+        conf = input(" 🚀 Confirmar disparo do pipeline? [S/n]: ").strip().upper()
+        if conf == 'N':
+            print("\n\033[31m🛑 Operação cancelada pelo operador.\033[0m\n")
+            sys.exit(0)
+
+    # =========================================================================
+    # EXECUÇÃO DA EXTRAÇÃO
+    # =========================================================================
+    print(f"\n\033[36m🚀 Inicializando pool de threads...\033[0m")
 
     try:
-        # 🔄 Executa o pipeline de forma isolada e limpa para cada ano do intervalo
-        for ano in range(ano_inicio, ano_fim + 1):
-            print(f"\n\033[34m📅 Processando lote do ano: {ano}\033[0m")
+        for ano in anos_alvos:
+            print(f"\n\033[34m📅 Processando lote consolidado do ano: {ano}\033[0m")
             executar_pipeline(
                 ano=ano,
-                log_func=log_colorido_terminal  # Passa o interceptador colorido para o pipeline
+                municipio_selecionado=mun_alvo,
+                endpoints_alvo=endpoints_alvo,
+                log_func=log_colorido_terminal
             )
             
-        print("\n\033[32m✅ Processo total finalizado com sucesso!\033[0m")
+        print("\n\033[32m✅ Ingestão finalizada com sucesso absoluto!\033[0m\n")
+        
+    except KeyboardInterrupt:
+        print("\n\033[31m🛑 Interrompido à força (Ctrl+C). Fechando conexões...\033[0m\n")
+        sys.exit(1)
     except Exception as e:
-        print(f"\n\033[31m❌ Erro crítico durante a execução: {e}\033[0m")
+        print(f"\n\033[31m❌ Erro crítico no motor de extração: {e}\033[0m\n")
+        sys.exit(1)
