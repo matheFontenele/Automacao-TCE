@@ -2,14 +2,14 @@
 
 Uma plataforma automatizada e orientada a metadados para **extração, consolidação e visualização de dados abertos** do Tribunal de Contas do Estado do Ceará (TCE-CE).
 
-O projeto utiliza uma arquitetura resiliente, com **Circuit Breaker**, tratamento automático de falhas, estratégias de contorno de bloqueios (WAF) e armazenamento em formato **Apache Parquet**, permitindo ingestão eficiente de grandes volumes de dados para análises posteriores.
+O projeto utiliza uma arquitetura resiliente, com **Circuit Breaker**, tratamento automático de falhas, estratégias de contorno de bloqueios (WAF) e armazenamento em formato **Apache Parquet**, permitindo a ingestão eficiente de grandes volumes de dados para análises posteriores.
 
 ---
 
 # ✨ Principais Recursos
 
 - 🚀 Extração automatizada dos Dados Abertos do TCE-CE
-- 📦 Armazenamento otimizado em formato **Parquet**
+- 📦 Armazenamento otimizado em formato **Apache Parquet**
 - 🔄 Arquitetura orientada a metadados (`endpoints.json`)
 - 🛡️ Circuit Breaker para tolerância a falhas
 - ⚡ Pipeline escalável para novas fontes de dados
@@ -23,83 +23,110 @@ O projeto utiliza uma arquitetura resiliente, com **Circuit Breaker**, tratament
 ```text
 .
 ├── app/                 # Interface Streamlit
-├── cli/                 # Assistente de terminal
+├── cli/                 # Assistente de Terminal
 ├── core/                # Motor de extração
 ├── config/
-│   └── endpoints.json   # Configuração dinâmica
-├── data/                # Arquivos Parquet
+│   └── endpoints.json   # Configuração dinâmica dos endpoints
+├── data/                # Arquivos Parquet gerados
 ├── docker-compose.yml
-└── run.bat
+├── Dockerfile
+└── requirements.txt
 ```
 
 ---
 
 # 🚀 Como Executar
 
-## Usuários Finais
+## Pré-requisitos
 
-Para iniciar o sistema:
+Antes de iniciar, certifique-se de possuir instalado:
 
-1. Abra a pasta raiz do projeto.
-2. Execute o arquivo:
-
-```text
-run.bat
-```
-
-3. Aguarde a inicialização.
-
-4. O navegador abrirá automaticamente o Dashboard.
+- Docker
+- Docker Compose
 
 ---
 
-## Funcionalidades do Painel
+## Usuários Finais (Dashboard)
 
-### Extração
+O sistema é executado integralmente através do **Docker**, garantindo um ambiente padronizado e simplificando a instalação.
 
-- Seleção de município
-- Escolha do endpoint
-- Definição do período
-- Execução manual da coleta
+### 1. Clone o repositório
 
-### Visualização
+```bash
+git clone https://github.com/seu-usuario/seu-repositorio.git
+cd seu-repositorio
+```
 
-- Navegação pelos datasets
-- Auditoria dos dados
-- Consulta aos arquivos armazenados
+### 2. Compile a imagem
 
-Todos os dados são persistidos automaticamente na pasta:
+Na primeira execução (ou sempre que houver alterações no código ou nas dependências), execute:
+
+```bash
+docker compose build
+```
+
+### 3. Inicie o sistema
+
+```bash
+docker compose up -d
+```
+
+Esse comando iniciará todos os serviços necessários em segundo plano.
+
+### 4. Acesse o Dashboard
+
+Abra seu navegador e acesse:
+
+```text
+http://localhost:8501
+```
+
+A interface permitirá:
+
+- 📥 Executar novas extrações de dados
+- 🗂️ Navegar pelos datasets armazenados
+- 🔍 Auditar informações extraídas
+- 📊 Visualizar os dados ingeridos
+
+Todos os arquivos são armazenados automaticamente na pasta:
 
 ```text
 data/
 ```
 
+### 5. Encerrar a aplicação
+
+Quando finalizar o uso:
+
+```bash
+docker compose down
+```
+
+Esse comando interrompe os containers mantendo os dados persistidos nos volumes configurados.
+
 ---
 
 # 💻 Utilização via CLI
 
-Também é possível utilizar apenas o mecanismo de extração através do terminal.
+Além da interface web, o projeto disponibiliza um **Assistente de Terminal (CLI)**, ideal para testes, depuração e execuções pontuais.
+
+Execute:
 
 ```bash
 docker compose run --rm cli
 ```
 
-Essa opção é recomendada para:
-
-- testes;
-- depuração;
-- novas integrações;
-- execução automatizada.
+O CLI permite realizar extrações específicas sem a necessidade de iniciar o Dashboard.
 
 ---
 
 # ⚙️ Expansão Dinâmica
 
-Toda a arquitetura é orientada por metadados.
+Toda a arquitetura foi desenvolvida para ser **orientada a metadados**.
 
-Isso significa que **não é necessário alterar o código Python para adicionar novos endpoints da API do TCE-CE.**
+Isso significa que **não é necessário alterar o código Python para adicionar novos endpoints da API do TCE-CE**.
 
-Basta adicionar uma nova entrada no arquivo:
+Basta adicionar uma nova entrada ao arquivo:
 
 ```text
 config/endpoints.json
@@ -114,25 +141,21 @@ config/endpoints.json
   "endpoint": "https://api-dados-abertos.tce.ce.gov.br/sim/bens_incorporados_patrimonio_municipio",
   "prefixo": "bens_incorporados_patrimonio_municipio",
   "frequencia": "intervalo_data",
-
   "params_obrigatorios": [
     "codigo_municipio",
     "data_inicio",
     "data_fim"
   ],
-
   "colunas_texto": {
     "especificacao_bem": "Especificação do Bem",
     "numero_tombamento": "Nº Tombamento"
   },
-
   "layout_card": {
     "topo_esq": "numero_tombamento",
     "titulo_grande": "especificacao_bem",
     "meta_1": "municipio_referencia",
     "meta_2": "data_incorporacao",
     "corpo_texto": "descricao_bem",
-
     "grid_financeiro": [
       {
         "coluna": "valor_bruto",
@@ -149,11 +172,11 @@ config/endpoints.json
 
 | Campo | Descrição |
 |--------|-----------|
-| `endpoint` | URL oficial da API |
-| `prefixo` | Nome base dos arquivos Parquet |
-| `frequencia` | Estratégia de iteração temporal |
-| `params_obrigatorios` | Parâmetros exigidos pela API |
-| `colunas_texto` | Colunas exibidas como texto |
+| `endpoint` | URL oficial da API do TCE-CE |
+| `prefixo` | Prefixo utilizado na geração dos arquivos `.parquet` |
+| `frequencia` | Estratégia utilizada para percorrer períodos de consulta |
+| `params_obrigatorios` | Parâmetros exigidos pelo endpoint |
+| `colunas_texto` | Define colunas que devem ser exibidas como texto |
 | `layout_card` | Configuração automática dos cards do Dashboard |
 
 ---
@@ -170,7 +193,7 @@ config/endpoints.json
 
 # ⚠️ Boas Práticas
 
-## Tabelas Financeiras
+### Endpoints Financeiros
 
 Normalmente exigem:
 
@@ -186,7 +209,7 @@ Exemplos:
 
 ---
 
-## Tabelas Patrimoniais
+### Endpoints Patrimoniais
 
 Normalmente utilizam:
 
@@ -205,13 +228,13 @@ Exemplos:
 
 - Veículos
 - Imóveis
-- Bens Patrimoniais
+- Patrimônio
 
 ---
 
 # ✔️ Validação
 
-Após adicionar um novo endpoint, recomenda-se testar utilizando o CLI.
+Após adicionar um novo endpoint, recomenda-se realizar um teste utilizando o CLI:
 
 ```bash
 docker compose run --rm cli
@@ -223,7 +246,7 @@ Caso a API retorne:
 400 Bad Request
 ```
 
-verifique principalmente o campo:
+Verifique principalmente o campo:
 
 ```json
 params_obrigatorios
@@ -235,8 +258,8 @@ params_obrigatorios
 
 - Python
 - Streamlit
-- DuckDB
 - Pandas
+- DuckDB
 - Apache Parquet
 - Docker
 - Docker Compose
@@ -246,14 +269,14 @@ params_obrigatorios
 
 ---
 
-# 🤝 Contribuição
+# 🤝 Contribuindo
 
-Sugestões, melhorias e correções são bem-vindas.
+Sugestões, melhorias e correções são sempre bem-vindas.
 
-Caso identifique alterações na API do TCE-CE, mudanças de rotas ou novos mecanismos de proteção (WAF), abra uma **Issue** ou envie um **Pull Request**.
+Caso identifique alterações na API do TCE-CE, mudanças de rotas ou novos mecanismos de proteção, abra uma **Issue** ou envie um **Pull Request**.
 
 ---
 
 # 📄 Licença
 
-Este projeto foi desenvolvido para fins de automação, integração e análise de dados públicos disponibilizados pelo Tribunal de Contas do Estado do Ceará.
+Este projeto foi desenvolvido para automatizar a ingestão, organização e visualização de dados públicos disponibilizados pelo Tribunal de Contas do Estado do Ceará.
