@@ -42,7 +42,6 @@ O projeto utiliza uma arquitetura resiliente, com **Circuit Breaker**, tratament
 Antes de iniciar, certifique-se de possuir instalado:
 
 - Docker
-- Docker Compose
 
 ---
 
@@ -53,8 +52,8 @@ O sistema é executado integralmente através do **Docker**, garantindo um ambie
 ### 1. Clone o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/seu-repositorio.git
-cd seu-repositorio
+git clone https://github.com/matheFontenele/Automacao-TCE.git
+cd automacao_api_tse
 ```
 
 ### 2. Compile a imagem
@@ -93,6 +92,35 @@ Todos os arquivos são armazenados automaticamente na pasta:
 ```text
 data/
 ```
+
+> **⚠️ O Dashboard não abriu em `http://localhost:8501`?**
+>
+> Verifique se o container da aplicação está em execução:
+>
+> ```bash
+> docker ps
+> ```
+>
+> Localize o container **`automacao-app`** e observe a coluna **PORTS**, que informa em qual porta o Streamlit foi publicado.
+>
+> Exemplo:
+>
+> ```text
+> CONTAINER ID   IMAGE             PORTS
+> a1b2c3d4e5f6   automacao-app      0.0.0.0:8502->8501/tcp
+> ```
+>
+> Nesse caso, o Dashboard deverá ser acessado em:
+>
+> ```text
+> http://localhost:8502
+> ```
+>
+> Se o container **`automacao-app`** não estiver em execução, verifique os logs para identificar o problema:
+>
+> ```bash
+> docker compose logs app
+> ```
 
 ### 5. Encerrar a aplicação
 
@@ -273,7 +301,7 @@ params_obrigatorios
 
 Sugestões, melhorias e correções são sempre bem-vindas.
 
-Caso identifique alterações na API do TCE-CE, mudanças de rotas ou novos mecanismos de proteção, abra uma **Issue** ou envie um **Pull Request**.
+Caso identifique alterações na API do TCE-CE, mudanças de rotas, novos mecanismos de proteção ou queira contribuir com novas funcionalidades, abra uma **Issue** ou envie um **Pull Request**.
 
 ---
 
