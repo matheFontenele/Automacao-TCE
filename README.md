@@ -1,20 +1,30 @@
-# Automação de Extração de Dados - TCE-CE
+# 🏛️ TCE-CE Ingestion Engine & Dashboard
 
-Este sistema realiza a extração automatizada de notas de empenho e notas fiscais da API de dados abertos do TCE-CE, consolidando os dados para análise.
+Uma plataforma automatizada e orientada a metadados para extração, consolidação e visualização de dados abertos do Tribunal de Contas do Estado do Ceará (TCE-CE). 
 
-## Como utilizar
+Este sistema utiliza uma arquitetura resiliente (com *Circuit Breakers* e contorno de WAF) para baixar dados governamentais em larga escala, salvando-os em formato otimizado `.parquet` para análises avançadas.
 
-Para iniciar o sistema pela primeira vez ou realizar uma nova extração:
+---
 
-1. Abra a pasta deste projeto.
+## 🚀 Como Utilizar (Usuários Finais)
+
+Para iniciar o sistema e acessar o Painel de Controle:
+
+1. Abra a pasta raiz deste projeto.
 2. Dê um **duplo clique** no arquivo `run.bat`.
-3. Aguarde a tela preta (terminal) carregar as dependências automaticamente.
-4. O navegador abrirá automaticamente em uma nova janela com o Painel de Controle.
+3. Aguarde o terminal carregar as dependências em segundo plano.
+4. O navegador abrirá automaticamente o **Painel de Controle** (Streamlit).
+5. **No Painel:**
+   - **Extração:** Selecione o município e os parâmetros desejados para forçar uma nova extração.
+   - **Visualização:** Navegue pelas abas superiores para auditar os dados ingeridos.
+   - Os arquivos extraídos ficam armazenados de forma persistente na pasta `data/`.
 
-## No Painel de Controle:
-- **Extração:** Selecione o ano desejado no campo "Ano Base" e clique no botão **Executar Extração**.
-- **Visualização:** Utilize as abas superiores para navegar entre os dados de "Notas de Empenho" e "Notas Fiscais".
-- **Dados:** Os arquivos resultantes ficam salvos automaticamente na pasta `data/`.
+---
 
-## Suporte
-Em caso de erro ou necessidade de atualização, contate o responsável pelo desenvolvimento do sistema.
+## 💻 Como Utilizar (Desenvolvedores / CLI)
+
+O sistema conta com um Assistente de Terminal (CLI) conteinerizado, ideal para extrações cirúrgicas sem precisar subir a interface gráfica.
+
+Para evocar o terminal interativo via Docker:
+```bash
+docker compose run --rm cli
