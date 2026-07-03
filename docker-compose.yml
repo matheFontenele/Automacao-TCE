@@ -36,4 +36,5 @@ services:
       - .:/app
       - /app/__pycache__
       - /app/venv
+      - /app/.git
     command: python src/main.py  # Sem argumentos -> Força cair no Wizard!

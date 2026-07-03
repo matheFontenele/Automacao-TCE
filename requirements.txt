@@ -1,7 +1,17 @@
+# --- Core & Ingestão de Dados ---
 pandas
 requests
-streamlit
-openpyxl
 pyarrow
 tqdm
+
+# --- Interface Gráfica ---
+streamlit
+
+# --- Processamento de Documentos e Excel ---
+openpyxl
 reportlab
+
+# --- Motor Antifraude (Visão Computacional e OCR) ---
+pytesseract
+opencv-python-headless
+Pillow

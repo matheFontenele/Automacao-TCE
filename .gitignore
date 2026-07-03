@@ -1,5 +1,4 @@
-# --- Ambiente Virtual e Executáveis ---
-# Ignora ambientes virtuais, pastas de Python portátil e instaladores
+# --- Ambientes Virtuais e Executáveis ---
 venv/
 .venv/
 env/
@@ -10,27 +9,40 @@ Python/
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
 
-# --- Dados Gerados ---
-# Ignora a pasta de dados e arquivos de resultados
-data/
-data_internal/
+# --- Dados Gerados (Data Lake Local) ---
+# Ignora todo o conteúdo das pastas de dados, mas não as pastas em si
+data/*
+data_internal/*
+*.parquet
 *.csv
+*.xlsx
+
+# Exceção vital: Garante que as pastas subirão vazias para o GitHub
+!data/.gitkeep
+!data_internal/.gitkeep
+
+# --- Arquivos de Teste do OCR (Imagens) ---
+# Garante que você não faça upload das fotos de notas fiscais sem querer
+*.png
+*.jpg
+*.jpeg
+
+# --- Configurações Essenciais ---
+# Ignora jsons perdidos na raiz, EXCETO os motores do seu sistema
 *.json
-# O "!" inverte a regra: mantém o município.json que é essencial para o script
 !municipios.json
 !endpoints.json
 
-# --- Arquivos de Sistema e IDE ---
+# --- Arquivos de Sistema, IDEs e Segredos ---
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 .env
+
+# --- Scripts Antigos e Logs ---
 run.bat
-
-# --- Logs ---
-*.log
-
-# --- Arquivos temporários criados pelo seu instalador ---
 python_installer.exe
+*.log
