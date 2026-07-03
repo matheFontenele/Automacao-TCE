@@ -7,40 +7,27 @@ import os
 
 @st.cache_data
 def carregar_municipios_json():
-    """
-    Lê o JSON oficial de municípios e retorna uma lista formatada para o Selectbox.
-    O st.cache_data garante que o disco só seja lido uma vez.
-    """
-    # Procura o arquivo na raiz do projeto (onde o Docker o copia)
     caminho = 'municipios.json'
     
-    # Fallback de segurança caso você rode localmente de dentro da pasta src/
     if not os.path.exists(caminho):
         caminho = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'municipios.json')
         
     try:
         with open(caminho, 'r', encoding='utf-8') as f:
             dados = json.load(f)
-            # Pega o array dentro de "elements"
             elementos = dados.get('elements', [])
             
-            # Formata a string para: "NOME DO MUNICIPIO (CÓDIGO)"
             lista_formatada = [f"{m['nome_municipio']} ({m['codigo_municipio']})" for m in elementos]
             
-            # Retorna a lista em ordem alfabética para facilitar a busca do usuário
             return sorted(lista_formatada)
     except Exception as e:
         st.error(f"Erro ao carregar a lista de municípios: {e}")
         return ["Erro de Carregamento"]
 
 def calcular_risco_mock(municipio, valor, mes):
-    """
-    Função temporária que simula o output do seu futuro modelo Random Forest.
-    No futuro, isso será substituído por: model.predict_proba(X)
-    """
-    time.sleep(1.5) # Simula o tempo de inferência do modelo
+
+    time.sleep(1.5)
     
-    # Lógica baseada em peso só para demonstração visual
     risco_base = 30
     if valor > 100000: risco_base += 40
     if mes == "Dezembro": risco_base += 20
@@ -52,10 +39,8 @@ def render_risk_page():
     st.header("🧠 Motor de Decisão Comercial - Risco de Inadimplência")
     st.markdown("Avalie a probabilidade de atraso superior a 30 dias em licitações antes de precificar propostas.")
     
-    # Carrega a lista dinâmica
     lista_municipios = carregar_municipios_json()
     
-    # Tenta definir Sobral como default na interface para agilizar suas análises
     try:
         index_default = next(i for i, v in enumerate(lista_municipios) if "SOBRAL" in v.upper())
     except StopIteration:
@@ -79,7 +64,6 @@ def render_risk_page():
                                      ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", 
                                       "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"])
         
-    # Botão de gatilho para a IA
     if st.button("🔮 Calcular Risco de Atraso", type="primary", use_container_width=True):
         
         # ==========================================
@@ -91,17 +75,14 @@ def render_risk_page():
         with st.spinner("Extraindo padrões do TCE-CE e rodando inferência..."):
             prob_atraso = calcular_risco_mock(municipio, valor_contrato, mes_licitacao)
         
-        # Renderização dinâmica baseada no grau de risco
         col_metric, col_recom = st.columns([1, 2])
         
         with col_metric:
-            # Cor condicional para o indicador
             cor = "🔴 ALTO" if prob_atraso > 65 else ("🟡 MÉDIO" if prob_atraso > 30 else "🟢 BAIXO")
             
             st.metric(label="Probabilidade de Atraso (>30 dias)", value=f"{prob_atraso}%", delta=cor, delta_color="off")
             
         with col_recom:
-            # Pega apenas o nome da cidade, removendo o "(CÓDIGO)" para a mensagem ficar elegante
             nome_cidade_limpo = municipio.split(' (')[0].title()
             
             if prob_atraso > 65:

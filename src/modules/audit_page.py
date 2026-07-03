@@ -8,11 +8,6 @@ from src.modules.ocr_engine import processar_imagem_nf, auditar_dados_nf
 
 @st.cache_data
 def carregar_empenhos_reais():
-    """
-    Lê os arquivos Parquet de empenho gerados pelo motor de extração.
-    Usa cache para não sobrecarregar a memória ao trocar de tela.
-    """
-    # Procura na pasta local ou na raiz do contêiner
     caminho_base = "data/"
     if not os.path.exists(caminho_base):
         caminho_base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
@@ -22,18 +17,14 @@ def carregar_empenhos_reais():
     if not arquivos:
         return pd.DataFrame()
         
-    # Empilha todos os parquets encontrados
     df = pd.concat([pd.read_parquet(f) for f in arquivos], ignore_index=True)
     
-    # Remove duplicatas caso o mesmo empenho tenha vindo em meses diferentes
     df = df.drop_duplicates(subset=['numero_empenho'])
     
-    # Filtra colunas nulas ou zumbis
     df = df.dropna(subset=['numero_empenho', 'numero_documento_negociante'])
     return df
 
 def limpar_apenas_numeros(texto):
-    """Remove pontos, barras e traços de CNPJs para garantir o match perfeito."""
     if pd.isna(texto) or not texto:
         return ""
     return re.sub(r'[^0-9]', '', str(texto))
@@ -51,16 +42,13 @@ def render_audit_page():
 
     st.subheader("1. Selecione o Contrato (Base TCE-CE)")
     
-    # Cria uma lista bonita para o usuário ler: "2026.01.001 - EMPRESA X"
     opcoes_display = df_empenhos['numero_empenho'].astype(str) + " — " + df_empenhos['nome_negociante'].astype(str)
     
     empenho_selecionado = st.selectbox("Busque pelo Empenho ou Fornecedor", opcoes_display)
     
-    # Isola a linha exata que o usuário escolheu
     numero_alvo = empenho_selecionado.split(" — ")[0]
     linha_alvo = df_empenhos[df_empenhos['numero_empenho'].astype(str) == numero_alvo].iloc[0]
 
-    # Prepara as variáveis esperadas (Gabarito)
     cnpj_esperado = str(linha_alvo['numero_documento_negociante'])
     valor_esperado = pd.to_numeric(linha_alvo['valor_empenhado'], errors='coerce')
     
