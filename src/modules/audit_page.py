@@ -5,7 +5,6 @@ import os
 import re
 import json
 from PIL import Image
-from src.modules.ocr_engine import processar_imagem_nf, auditar_dados_nf
 
 @st.cache_data
 def carregar_mapa_municipios():

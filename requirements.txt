@@ -15,3 +15,4 @@ reportlab
 pytesseract
 opencv-python-headless
 Pillow
+PyMuPDF
